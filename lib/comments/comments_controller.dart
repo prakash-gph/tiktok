@@ -6,20 +6,20 @@ import 'package:tiktok/comments/comments_modle.dart';
 class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  Future<User> getUser(String uid) async {
+  Future<AppUser> getUser(String uid) async {
     final doc = await _firestore
         .collection('users')
         .doc(AuthenticationController.instanceAuth.user.uid)
         .get();
-    return User.fromSnap(doc);
+    return AppUser.fromSnap(doc);
   }
 
-  Stream<User> getUserStream(String uid) {
+  Stream<AppUser> getUserStream(String uid) {
     return _firestore
         .collection('users')
         .doc(uid)
         .snapshots()
-        .map((snapshot) => User.fromSnap(snapshot));
+        .map((snapshot) => AppUser.fromSnap(snapshot));
   }
 
   // Comment operations

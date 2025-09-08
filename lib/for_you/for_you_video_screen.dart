@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:tiktok/authentication/authentication_controller.dart';
 import 'package:tiktok/comments/comments_screen.dart';
+import 'package:tiktok/share_vieos/share_videos.models.dart';
 import 'package:tiktok/upload_videos/get_video_url_controller.dart';
 import 'package:tiktok/upload_videos/video_palyer_item.dart';
 import 'package:tiktok/widgets/circle_animation_profile.dart';
 import 'package:share_plus/share_plus.dart';
 
+// ignore: must_be_immutable
 class ForYouVideoScreen extends StatelessWidget {
   // ignore: use_super_parameters
   ForYouVideoScreen({Key? key}) : super(key: key);
@@ -14,6 +17,8 @@ class ForYouVideoScreen extends StatelessWidget {
   final GetVideoUrlController getVideoUrlController = Get.put(
     GetVideoUrlController(),
   );
+
+  String authUserId = AuthenticationController.instanceAuth.user.uid;
 
   Widget buildProfile(String profilePhoto, int index) {
     return SizedBox(
@@ -218,10 +223,13 @@ class ForYouVideoScreen extends StatelessWidget {
                                     ),
                                     const SizedBox(height: 0),
                                     Text(
-                                      data.likesList!.length.toString(),
+                                      _formatCount(data.likesList!.length),
 
+                                      // style: TextStyle(color: Colors.white),
+                                      //  data.likesList!.length.toString(),
                                       style: const TextStyle(
                                         fontSize: 20,
+                                        fontWeight: FontWeight.w700,
                                         color: Colors.white,
                                       ),
                                     ),
@@ -255,9 +263,11 @@ class ForYouVideoScreen extends StatelessWidget {
                                     ),
                                     const SizedBox(height: 0),
                                     Text(
-                                      (data.totalComments ?? 0).toString(),
+                                      _formatCount(data.totalComments!),
+
                                       style: const TextStyle(
                                         fontSize: 20,
+                                        fontWeight: FontWeight.w700,
                                         color: Colors.white,
                                       ),
                                     ),
@@ -268,7 +278,13 @@ class ForYouVideoScreen extends StatelessWidget {
                                     InkWell(
                                       onTap: () {
                                         // Add share functionality
-                                        Share.share("ddddddd");
+                                        showShareSheet(
+                                          context,
+                                          authUserId,
+                                          "${data.videoUrl}",
+                                          "${data.descriptionTags}",
+                                          "${data.videoId}",
+                                        );
                                       },
                                       child: const Icon(
                                         Icons.reply,
@@ -278,9 +294,10 @@ class ForYouVideoScreen extends StatelessWidget {
                                     ),
                                     const SizedBox(height: 7),
                                     Text(
-                                      (data.totalShares ?? 0).toString(),
+                                      _formatCount(data.totalShares!),
                                       style: const TextStyle(
                                         fontSize: 20,
+                                        fontWeight: FontWeight.w700,
                                         color: Colors.white,
                                       ),
                                     ),
@@ -311,12 +328,98 @@ class ForYouVideoScreen extends StatelessWidget {
     );
   }
 
-  // void _shareVideo(BuildContext context) {
-  //   print("tttttttttt");
-  //   // Create a shareable message
-  //   final String shareText = 'Check out this TikTok video:';
+  String _formatCount(int count) {
+    if (count < 1000) return count.toString();
+    if (count < 1000000) return '${(count / 1000).toStringAsFixed(1)}K';
+    return '${(count / 1000000).toStringAsFixed(1)}M';
+  }
 
-  //   // Share the content
-  //   Share.share(shareText);
-  // }
+  void showShareSheet(
+    BuildContext context,
+    String authUserId,
+    String videoUrl,
+    String description,
+    String videoId,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      builder: (BuildContext context) {
+        return Container(
+          height: 300,
+          color: Colors.black,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Text(
+                  'Share to',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              Divider(color: Colors.grey[800]),
+              Expanded(
+                child: GridView.count(
+                  crossAxisCount: 4,
+                  children: [
+                    _buildShareOption(Icons.chat_rounded, 'Whatsapp', () {
+                      Navigator.pop(context);
+                      Share.share(
+                        // ignore: unnecessary_brace_in_string_interps
+                        'Check this out: ${videoUrl}',
+                        subject: description,
+                      );
+                      shareVideoAndTrack(videoId, authUserId);
+                    }),
+                    _buildShareOption(Icons.email, 'Email', () {
+                      Navigator.pop(context);
+                      Share.share(
+                        'Check this out: $videoUrl',
+                        subject: description,
+                      );
+                      shareVideoAndTrack(videoId, authUserId);
+                    }),
+                    _buildShareOption(Icons.facebook, 'Facebook', () {
+                      Navigator.pop(context);
+                      // You might use a dedicated package for Facebook sharing
+                      Share.share(
+                        'Check this out: $videoUrl',
+                        subject: description,
+                      );
+                      shareVideoAndTrack(videoId, authUserId);
+                    }),
+                    _buildShareOption(Icons.link, 'Copy Link', () {
+                      Navigator.pop(context);
+                      Clipboard.setData(ClipboardData(text: videoUrl));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Link copied to clipboard')),
+                      );
+                    }),
+                    // Add more platforms as needed
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildShareOption(IconData icon, String label, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: Colors.white, size: 30),
+          SizedBox(height: 8),
+          Text(label, style: TextStyle(color: Colors.white, fontSize: 12)),
+        ],
+      ),
+    );
+  }
 }

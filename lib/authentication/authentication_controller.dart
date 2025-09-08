@@ -95,7 +95,7 @@ class AuthenticationController extends GetxController {
 
       String imagesDownloadUrl = await uploadImageToStorage(imagesFile);
 
-      userModle.User user = userModle.User(
+      userModle.AppUser user = userModle.AppUser(
         name: userName,
         email: userEmail,
         image: imagesDownloadUrl,

@@ -1,6 +1,6 @@
 import "package:cloud_firestore/cloud_firestore.dart";
 
-class User {
+class AppUser {
   String? name;
   String? uid;
   String? image;
@@ -9,8 +9,11 @@ class User {
   String? facebook;
   String? x;
   String? instagram;
+  final int followers;
+  final int following;
+  String? bio;
 
-  User({
+  AppUser({
     this.name,
     this.uid,
     this.image,
@@ -19,6 +22,9 @@ class User {
     this.email,
     this.x,
     this.instagram,
+    this.followers = 0,
+    this.following = 0,
+    this.bio,
   });
   Map<String, dynamic> toJson() => {
     "name": name,
@@ -29,12 +35,15 @@ class User {
     "email": email,
     "x": x,
     "instagram": instagram,
+    'followers': followers,
+    'following': following,
+    'bio': bio,
   };
 
-  static User fromSnap(DocumentSnapshot snapshot) {
+  static AppUser fromSnap(DocumentSnapshot snapshot) {
     var dataSnapshot = snapshot.data() as Map<String, dynamic>;
 
-    return User(
+    return AppUser(
       name: dataSnapshot["name"],
       uid: dataSnapshot["uid"],
       image: dataSnapshot["image"],
@@ -43,6 +52,9 @@ class User {
       x: dataSnapshot["x"],
       youtube: dataSnapshot["youtube"],
       instagram: dataSnapshot["instagram"],
+      followers: dataSnapshot["followers"] ?? 0,
+      following: dataSnapshot["following"] ?? 0,
+      bio: dataSnapshot["bio"] ?? "",
     );
   }
 }

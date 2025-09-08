@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:tiktok/following/followings_video_screen.dart';
 import 'package:tiktok/for_you/for_you_video_screen.dart';
@@ -6,6 +7,7 @@ import 'package:tiktok/search/search_screen.dart';
 
 import 'package:tiktok/upload_videos/upload_custom_icon.dart';
 import 'package:tiktok/upload_videos/upload_videos_screen.dart';
+//import 'package:tiktok/videofilterrecord/video_filter_record.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -16,12 +18,17 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int screenIndex = 0;
+  //String currentUserId = FirebaseAuth.instance.currentUser!.uid;
   List screenList = [
     ForYouVideoScreen(),
     SearchScreen(),
+    //VideoRecorderScreen(),
     UploadVideosScreen(),
     FollowingsVideoScreen(),
-    ProfileScreen(),
+    ProfileScreen(
+      userId: FirebaseAuth.instance.currentUser!.uid,
+      isCurrentUser: true,
+    ),
   ];
   @override
   Widget build(BuildContext context) {

@@ -1,4 +1,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+
+         <uses-permission android:name="android.permission.CAMERA" />
+         <uses-permission android:name="android.permission.RECORD_AUDIO" />
+         <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+         <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+
+
+
     <application
         android:label="tiktok"
         android:name="${applicationName}"
@@ -42,4 +51,8 @@
             <data android:mimeType="text/plain"/>
         </intent>
     </queries>
+         
+
+         
+
 </manifest>
