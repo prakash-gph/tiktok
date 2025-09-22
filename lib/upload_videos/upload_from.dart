@@ -88,10 +88,9 @@ class _UploadFromState extends State<UploadFrom> {
                         width: MediaQuery.of(context).size.width,
                         margin: const EdgeInsets.symmetric(horizontal: 22),
                         child: InputTextWidget(
-                          textEditingController:
-                              artistSongtextEditingController,
-                          lableStringe: "Artist-Song",
-                          iconData: Icons.music_video_rounded,
+                          controller: artistSongtextEditingController,
+                          label: "Artist-Song",
+                          icon: Icons.music_video_rounded,
                           isObscure: false,
                         ),
                       ),
@@ -103,10 +102,9 @@ class _UploadFromState extends State<UploadFrom> {
                         width: MediaQuery.of(context).size.width,
                         margin: const EdgeInsets.symmetric(horizontal: 22),
                         child: InputTextWidget(
-                          textEditingController:
-                              descriptionTagtextEditingController,
-                          lableStringe: "Description-tag",
-                          iconData: Icons.slideshow_sharp,
+                          controller: descriptionTagtextEditingController,
+                          label: "Description-tag",
+                          icon: Icons.slideshow_sharp,
                           isObscure: false,
                         ),
                       ),

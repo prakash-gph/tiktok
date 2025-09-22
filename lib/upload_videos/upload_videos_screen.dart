@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:tiktok/upload_videos/upload_from.dart';
+import 'package:tiktok/videofilterrecord/camera_screen.dart';
 
 class UploadVideosScreen extends StatefulWidget {
   const UploadVideosScreen({super.key});
@@ -52,7 +53,9 @@ class _UploadVideosScreenState extends State<UploadVideosScreen> {
 
           SimpleDialogOption(
             onPressed: () {
-              getVideoFile(ImageSource.camera);
+              // getVideoFile(ImageSource.camera);
+              Get.to(CameraScreen());
+              // Get.to(HomeVideoScreen());
             },
             child: Row(
               children: const [

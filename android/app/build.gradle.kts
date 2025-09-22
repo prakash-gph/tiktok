@@ -2,14 +2,15 @@ plugins {
     id("com.android.application")
     id("kotlin-android")
     id("com.google.gms.google-services")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+    
 }
 
 android {
     namespace = "com.example.tiktok"
     compileSdk = 36
     ndkVersion = "27.0.12077973"
+    buildToolsVersion = "34.0.0"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -17,7 +18,7 @@ android {
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_11.toString()
+        jvmTarget = "11"
     }
 
     defaultConfig {
@@ -27,11 +28,14 @@ android {
         // For more information, see: https://flutter.dev/to/review-gradle-config.
       //  minSdk = flutter.minSdkVersion
         minSdk = 21
-        targetSdk = flutter.targetSdkVersion
+        targetSdk = 34
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         multiDexEnabled = true
     }
+
+ 
+
 
     buildTypes {
         release {
@@ -45,4 +49,6 @@ android {
 flutter {
     source = "../.."
 }
+
+
 

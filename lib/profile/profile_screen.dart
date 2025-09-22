@@ -193,6 +193,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
         await _auth.signOut();
 
+        // ignore: use_build_context_synchronously
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (context) => LoginScreen()),
           (Route<dynamic> route) => false,
@@ -403,21 +404,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildProfileStats() {
+    // ignore: no_leading_underscores_for_local_identifiers
+    String _formatCount(int count) {
+      if (count < 1000) return count.toString();
+      if (count < 1000000) return '${(count / 1000).toStringAsFixed(1)}K';
+      return '${(count / 1000000).toStringAsFixed(1)}M';
+    }
+
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _buildStatItem(_videoCount.toString(), 'Videos'),
-          GestureDetector(
-            onTap: _navigateToFollowers,
-            child: _buildStatItem(_followerCount.toString(), 'Followers'),
+          _buildStatItem(_formatCount(_videoCount), 'Videos'),
+          _buildTappableStatItem(
+            _formatCount(_followerCount),
+            'Followers',
+            _navigateToFollowers,
           ),
-          GestureDetector(
-            onTap: _navigateToFollowing,
-            child: _buildStatItem(_followingCount.toString(), 'Following'),
+          _buildTappableStatItem(
+            //_formatCount(_followingCount),
+            _formatCount(_followingCount),
+            'Following',
+            _navigateToFollowing,
           ),
-          _buildStatItem(_totalLikes.toString(), 'Likes'),
+          _buildStatItem(_formatCount(_totalLikes), 'Likes'),
         ],
       ),
     );
@@ -437,6 +448,79 @@ class _ProfileScreenState extends State<ProfileScreen> {
         SizedBox(height: 4),
         Text(label, style: TextStyle(color: Colors.grey, fontSize: 12)),
       ],
+    );
+  }
+
+  Widget _buildTappableStatItem(
+    String value,
+    String label,
+    VoidCallback onTap,
+  ) {
+    return GestureDetector(
+      onTap: onTap,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: TweenAnimationBuilder<double>(
+          duration: Duration(milliseconds: 200),
+          tween: Tween(begin: 1.0, end: 1.0),
+          builder: (context, scale, child) {
+            return Transform.scale(scale: scale, child: child);
+          },
+          child: Container(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  const Color.fromARGB(255, 126, 85, 85)!,
+                  const Color.fromARGB(255, 84, 16, 16)!,
+                ],
+              ),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  // ignore: deprecated_member_use
+                  color: Colors.black.withOpacity(0.3),
+                  blurRadius: 8,
+                  offset: Offset(0, 4),
+                ),
+              ],
+              border: Border.all(color: Colors.grey[700]!, width: 1),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  value,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    shadows: [
+                      Shadow(
+                        blurRadius: 4,
+                        // ignore: deprecated_member_use
+                        color: Colors.black.withOpacity(0.5),
+                        offset: Offset(1, 1),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(height: 6),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: Colors.grey[400],
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 

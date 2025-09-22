@@ -3,8 +3,13 @@ import 'package:video_player/video_player.dart';
 
 class VideoPalyerItem extends StatefulWidget {
   final String videoUrl;
-  // ignore: use_super_parameters
-  const VideoPalyerItem({Key? key, required this.videoUrl}) : super(key: key);
+  final bool isPlaying;
+
+  const VideoPalyerItem({
+    super.key,
+    required this.videoUrl,
+    this.isPlaying = true,
+  });
 
   @override
   State<VideoPalyerItem> createState() => _VideoPalyerItemState();
@@ -21,9 +26,21 @@ class _VideoPalyerItemState extends State<VideoPalyerItem> {
     _initializeVideoPlayer();
   }
 
+  @override
+  void didUpdateWidget(covariant VideoPalyerItem oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.isPlaying != widget.isPlaying) {
+      if (widget.isPlaying && _isInitialized) {
+        _videoPlayerController.play();
+      } else if (_isInitialized) {
+        _videoPlayerController.pause();
+      }
+    }
+  }
+
   Future<void> _initializeVideoPlayer() async {
     try {
-      // Check if videoUrl is not null or empty
       if (widget.videoUrl.isEmpty) {
         setState(() {
           _hasError = true;
@@ -40,13 +57,15 @@ class _VideoPalyerItemState extends State<VideoPalyerItem> {
         setState(() {
           _isInitialized = true;
         });
-        _videoPlayerController.play();
+
+        if (widget.isPlaying) {
+          _videoPlayerController.play();
+        }
+
         _videoPlayerController.setVolume(1);
         _videoPlayerController.setLooping(true);
       }
     } catch (e) {
-      // ignore: avoid_print
-      print('Error initializing video player: $e');
       if (mounted) {
         setState(() {
           _hasError = true;
@@ -87,11 +106,17 @@ class _VideoPalyerItemState extends State<VideoPalyerItem> {
       );
     }
 
-    return Container(
+    return SizedBox(
       width: size.width,
       height: size.height,
-      decoration: const BoxDecoration(color: Colors.black),
-      child: VideoPlayer(_videoPlayerController),
+      child: FittedBox(
+        fit: BoxFit.cover,
+        child: SizedBox(
+          width: _videoPlayerController.value.size.width,
+          height: _videoPlayerController.value.size.height,
+          child: VideoPlayer(_videoPlayerController),
+        ),
+      ),
     );
   }
 }
