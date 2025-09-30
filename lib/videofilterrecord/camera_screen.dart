@@ -1,323 +1,195 @@
-import 'dart:async';
+// import 'dart:io';
+// import 'package:camera/camera.dart';
+// import 'package:flutter/material.dart';
+// import 'package:path_provider/path_provider.dart';
+// import 'editor_screen.dart';
+
+// class CameraScreen extends StatefulWidget {
+// const CameraScreen({super.key});
+
+// @override
+// State<CameraScreen> createState() => _CameraScreenState();
+// }
+
+// class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver {
+// CameraController? _controller;
+// List<CameraDescription>? _cameras;
+// bool _isRecording = false;
+
+// @override
+// void initState() {
+// super.initState();
+// WidgetsBinding.instance.addObserver(this);
+// _initCameras();
+// }
+
+// Future<void> _initCameras() async {
+// _cameras = await availableCameras();
+// if (_cameras != null && _cameras!.isNotEmpty) {
+// _controller = CameraController(_cameras!.first, ResolutionPreset.high, enableAudio: true);
+// await _controller!.initialize();
+// if (!mounted) return;
+// setState(() {});
+// }
+// }@override
+// _controller?.dispose();
+// super.dispose();
+// }
+
+// Future<void> _startRecording() async {
+// if (_controller == null || !_controller!.value.isInitialized) return;
+// await _controller!.startVideoRecording();
+// setState(() => _isRecording = true);
+// }
+
+// Future<void> _stopRecording() async {
+// if (_controller == null || !_controller!.value.isRecordingVideo) return;
+// final file = await _controller!.stopVideoRecording();
+// setState(() => _isRecording = false);
+// if (!mounted) return;
+
+// // navigate to editor with recorded file
+// Navigator.of(context).push(MaterialPageRoute(
+// builder: (_) => EditorScreen(videoFile: File(file.path)),
+// ));
+// }
+
+// @override
+// Widget build(BuildContext context) {
+// if (_controller == null || !_controller!.value.isInitialized) {
+// return const Scaffold(body: Center(child: CircularProgressIndicator()));
+// }
+
+// return Scaffold(
+// body: Stack(
+// children: [
+// CameraPreview(_controller!),
+// Positioned(
+// bottom: 40,
+// left: 0,
+// right: 0,
+// child: Row(
+// mainAxisAlignment: MainAxisAlignment.center,
+// children: [
+// GestureDetector(
+// onLongPress: _startRecording,
+// onLongPressUp: _stopRecording,
+// child: Container(
+// width: 80,
+// height: 80,
+// decoration: BoxDecoration(
+// color: _isRecording ? Colors.red : Colors.white54,
+// shape: BoxShape.circle,
+// ),
+// ),
+// ),
+// ],
+// ),
+// ),
+// ],
+// ),
+// );
+// }
+
+import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
-import 'package:tiktok/utils/filters.dart';
-import 'package:tiktok/videofilterrecord/camera_controls.dart';
-import 'package:tiktok/videofilterrecord/filter_selector.dart';
-import 'package:tiktok/videofilterrecord/recording_timer.dart';
-import 'package:tiktok/videofilterrecord/video_preview_screen.dart';
+import 'editor_screen.dart';
 
 class CameraScreen extends StatefulWidget {
-  const CameraScreen({Key? key}) : super(key: key);
+  const CameraScreen({super.key});
 
   @override
-  _CameraScreenState createState() => _CameraScreenState();
+  State<CameraScreen> createState() => _CameraScreenState();
 }
 
-class _CameraScreenState extends State<CameraScreen> {
+class _CameraScreenState extends State<CameraScreen>
+    with WidgetsBindingObserver {
   CameraController? _controller;
-  Future<void>? _initializeControllerFuture;
+  List<CameraDescription>? _cameras;
   bool _isRecording = false;
-  int _selectedFilterIndex = 0;
-  double _recordingProgress = 0.0;
-  Timer? _recordingTimer;
-  XFile? _recordedVideo;
-  bool _isCameraInitialized = false;
-  bool _hasCameraError = false;
-
-  // Define the filters list
-  final List<VideoFilter> _filters = videoFilters;
 
   @override
   void initState() {
     super.initState();
-    _initializeCamera();
+    WidgetsBinding.instance.addObserver(this);
+    _initCameras();
   }
 
-  Future<void> _initializeCamera() async {
-    try {
-      final cameras = await availableCameras();
-
-      if (cameras.isEmpty) {
-        setState(() {
-          _hasCameraError = true;
-        });
-        return;
-      }
-
-      final firstCamera = cameras.first;
-
+  Future<void> _initCameras() async {
+    _cameras = await availableCameras();
+    if (_cameras != null && _cameras!.isNotEmpty) {
       _controller = CameraController(
-        firstCamera,
+        _cameras!.first,
         ResolutionPreset.high,
         enableAudio: true,
       );
-
-      _initializeControllerFuture = _controller!.initialize();
-
-      _initializeControllerFuture!
-          .then((_) {
-            if (mounted) {
-              setState(() {
-                _isCameraInitialized = true;
-              });
-            }
-          })
-          .catchError((e) {
-            if (mounted) {
-              setState(() {
-                _hasCameraError = true;
-              });
-            }
-            print("Camera initialization failed: $e");
-          });
-    } catch (e) {
-      setState(() {
-        _hasCameraError = true;
-      });
-      print("Camera initialization failed: $e");
+      await _controller!.initialize();
+      if (!mounted) return;
+      setState(() {});
     }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _controller?.dispose();
-    _recordingTimer?.cancel();
     super.dispose();
   }
 
-  void _startRecording() async {
-    if (_controller == null || !_isCameraInitialized) return;
-
-    try {
-      await _initializeControllerFuture;
-
-      setState(() {
-        _isRecording = true;
-        _recordingProgress = 0.0;
-      });
-
-      await _controller!.startVideoRecording();
-
-      _recordingTimer = Timer.periodic(const Duration(milliseconds: 200), (
-        timer,
-      ) {
-        if (mounted) {
-          setState(() {
-            _recordingProgress += 0.1 / 15.0;
-            if (_recordingProgress >= 1.0) {
-              _stopRecording();
-            }
-          });
-        }
-      });
-    } catch (e) {
-      print('Error starting recording: $e');
-    }
+  Future<void> _startRecording() async {
+    if (_controller == null || !_controller!.value.isInitialized) return;
+    await _controller!.startVideoRecording();
+    setState(() => _isRecording = true);
   }
 
-  void _stopRecording() async {
-    _recordingTimer?.cancel();
+  Future<void> _stopRecording() async {
+    if (_controller == null || !_controller!.value.isRecordingVideo) return;
+    final file = await _controller!.stopVideoRecording();
+    setState(() => _isRecording = false);
+    if (!mounted) return;
 
-    try {
-      if (_controller != null && _controller!.value.isRecordingVideo) {
-        XFile videoFile = await _controller!.stopVideoRecording();
-
-        if (mounted) {
-          setState(() {
-            _isRecording = false;
-            _recordedVideo = videoFile;
-          });
-        }
-
-        // Navigate to preview screen
-        if (_recordedVideo != null && mounted) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => VideoPreviewScreen(
-                videoFile: _recordedVideo!,
-                videoFilter: _filters[_selectedFilterIndex],
-              ),
-            ),
-          ).then((_) {
-            // Reset after returning from preview
-            if (mounted) {
-              setState(() {
-                _recordedVideo = null;
-              });
-            }
-          });
-        }
-      }
-    } catch (e) {
-      print('Error stopping recording: $e');
-    }
-  }
-
-  void _toggleCamera() async {
-    if (_controller?.value.isRecordingVideo == true) return;
-
-    try {
-      final cameras = await availableCameras();
-      if (cameras.length < 2) return; // Need at least 2 cameras to toggle
-
-      final newCamera = cameras.firstWhere(
-        (camera) =>
-            camera.lensDirection != _controller!.description.lensDirection,
-        orElse: () => cameras.first,
-      );
-
-      await _controller?.dispose();
-
-      setState(() {
-        _isCameraInitialized = false;
-        _controller = CameraController(
-          newCamera,
-          ResolutionPreset.high,
-          enableAudio: true,
-        );
-        _initializeControllerFuture = _controller!.initialize();
-
-        _initializeControllerFuture!.then((_) {
-          if (mounted) {
-            setState(() {
-              _isCameraInitialized = true;
-            });
-          }
-        });
-      });
-    } catch (e) {
-      print('Error toggling camera: $e');
-    }
-  }
-
-  void _onFilterSelected(int index) {
-    setState(() {
-      _selectedFilterIndex = index;
-    });
+    // Navigator.of(context).push(
+    //   MaterialPageRoute(
+    //     builder: (_) => EditorScreen(videoFile: File(file.path)),
+    //   ),
+    // );
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_controller == null || !_controller!.value.isInitialized) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
     return Scaffold(
-      body: _hasCameraError
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.videocam_off, size: 64, color: Colors.grey),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Camera Error',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+      body: Stack(
+        children: [
+          CameraPreview(_controller!),
+          Positioned(
+            bottom: 40,
+            left: 0,
+            right: 0,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                GestureDetector(
+                  onLongPress: _startRecording,
+                  onLongPressUp: _stopRecording,
+                  child: Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: _isRecording ? Colors.red : Colors.white54,
+                      shape: BoxShape.circle,
+                    ),
                   ),
-                  const SizedBox(height: 8),
-                  const Text('Could not initialize camera'),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: _initializeCamera,
-                    child: const Text('Retry'),
-                  ),
-                ],
-              ),
-            )
-          : FutureBuilder<void>(
-              future: _initializeControllerFuture,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.done) {
-                  if (!_isCameraInitialized || _controller == null) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-
-                  return Stack(
-                    children: [
-                      // Camera preview with filter
-                      ColorFiltered(
-                        colorFilter:
-                            _filters[_selectedFilterIndex].colorFilter ??
-                            const ColorFilter.mode(
-                              Colors.transparent,
-                              BlendMode.src,
-                            ),
-                        child: CameraPreview(_controller!),
-                      ),
-
-                      // Top controls
-                      const Positioned(
-                        top: 40,
-                        left: 0,
-                        right: 0,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Padding(
-                              padding: EdgeInsets.only(left: 16),
-                              child: Icon(
-                                Icons.close,
-                                size: 30,
-                                color: Colors.white,
-                              ),
-                            ),
-                            Padding(
-                              padding: EdgeInsets.only(right: 16),
-                              child: Icon(
-                                Icons.flash_on,
-                                size: 30,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      // Recording progress indicator
-                      if (_isRecording)
-                        Positioned(
-                          top: 40,
-                          left: 0,
-                          right: 0,
-                          child: RecordingTimer(progress: _recordingProgress),
-                        ),
-
-                      // Bottom controls
-                      Positioned(
-                        bottom: 10,
-                        left: 0,
-                        right: 0,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              // Filter selector
-                              FilterSelector(
-                                videoFilters: _filters,
-                                selectedIndex: _selectedFilterIndex,
-                                onFilterSelected: _onFilterSelected,
-                              ),
-                              const SizedBox(height: 10),
-                              // Camera controls
-                              CameraControls(
-                                isRecording: _isRecording,
-                                hasRecordedVideo: _recordedVideo != null,
-                                onRecordPressed: _isRecording
-                                    ? _stopRecording
-                                    : _startRecording,
-                                onCameraTogglePressed: _toggleCamera,
-                              ),
-                              const SizedBox(height: 10),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                } else {
-                  return const Center(child: CircularProgressIndicator());
-                }
-              },
+                ),
+              ],
             ),
+          ),
+        ],
+      ),
     );
   }
 }

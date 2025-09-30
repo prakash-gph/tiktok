@@ -12,6 +12,8 @@ import 'package:tiktok/upload_videos/upload_custom_icon.dart';
 // ignore: unused_import
 import 'package:tiktok/upload_videos/upload_videos_screen.dart';
 import 'package:tiktok/videofilterrecord/camera_screen.dart';
+import 'package:tiktok/videofilterrecord/merge.dart';
+import 'package:tiktok/videofilterrecord/video_recorder.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -30,6 +32,7 @@ class _HomeScreenState extends State<HomeScreen> {
     const SearchScreen(),
     const UploadVideosScreen(),
     //const CameraScreen(),
+    //VideoAudioMergeScreen(),
     NotificationsScreen(userId: FirebaseAuth.instance.currentUser!.uid),
     ProfileScreen(
       userId: FirebaseAuth.instance.currentUser!.uid,

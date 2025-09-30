@@ -10,15 +10,21 @@ import 'package:tiktok/for_you/custom_scroll_physics.dart';
 import 'package:tiktok/for_you/following_screen.dart';
 import 'package:tiktok/for_you/like_animation.dart';
 import 'package:tiktok/notification/notification_screen.dart';
+import 'package:tiktok/profile/profile_screen.dart';
 import 'package:tiktok/share_vieos/share_videos.models.dart';
 import 'package:tiktok/upload_videos/get_video_url_controller.dart';
+import 'package:tiktok/upload_videos/video.dart';
 import 'package:tiktok/upload_videos/video_palyer_item.dart';
 import 'package:tiktok/widgets/circle_animation_profile.dart';
 import 'package:share_plus/share_plus.dart';
 import 'dart:math';
 
 class ForYouVideoScreen extends StatefulWidget {
-  const ForYouVideoScreen({super.key});
+  const ForYouVideoScreen({
+    super.key,
+    // required final List<Video> videos,
+    // required int initialIndex,
+  });
 
   @override
   State<ForYouVideoScreen> createState() => _VideoScreenState();
@@ -35,7 +41,7 @@ class _VideoScreenState extends State<ForYouVideoScreen>
     keepPage: true,
   );
   int _currentPage = 0;
-  int _selectedTab = 0;
+
   bool _isLongPressing = false;
   late AnimationController _animationController;
   OverlayEntry? _likeAnimationOverlay;
@@ -77,7 +83,7 @@ class _VideoScreenState extends State<ForYouVideoScreen>
           },
           onError: (error) {
             // Handle error if needed
-            print('Notification stream error: $error');
+            debugPrint('Notification stream error: $error');
           },
         );
   }
@@ -86,6 +92,25 @@ class _VideoScreenState extends State<ForYouVideoScreen>
     if (videoController.videoList.isNotEmpty) {
       // Start with 3 random videos
       _loadMoreVideos(count: min(3, videoController.videoList.length));
+    }
+  }
+
+  final Set<String> _viewedVideos = {};
+
+  Future<void> _incrementVideoViews(String videoId) async {
+    if (_viewedVideos.contains(videoId)) return; // Already counted
+
+    try {
+      final videoRef = FirebaseFirestore.instance
+          .collection('videos')
+          .doc(videoId);
+
+      // Atomically increment the views field
+      await videoRef.update({'views': FieldValue.increment(1)});
+
+      _viewedVideos.add(videoId); // Mark as counted
+    } catch (e) {
+      debugPrint('Failed to increment views for $videoId: $e');
     }
   }
 
@@ -125,10 +150,31 @@ class _VideoScreenState extends State<ForYouVideoScreen>
     }
   }
 
+  // void _onPageChanged(int page) {
+  //   setState(() {
+  //     _currentPage = page;
+  //   });
+
+  //   // Load more videos when we're 2 away from the end
+  //   if (page >= _displayedVideoIndices.length - 2) {
+  //     _loadMoreVideos(count: 3);
+  //   }
+  // }
+
   void _onPageChanged(int page) {
     setState(() {
       _currentPage = page;
     });
+
+    if (_displayedVideoIndices.isEmpty) return;
+
+    final videoIndex = _displayedVideoIndices[page];
+    final data = videoController.videoList[videoIndex];
+
+    // Increment view count for the current video
+    if (data.videoId != null) {
+      _incrementVideoViews(data.videoId!);
+    }
 
     // Load more videos when we're 2 away from the end
     if (page >= _displayedVideoIndices.length - 2) {
@@ -182,26 +228,48 @@ class _VideoScreenState extends State<ForYouVideoScreen>
     return '${(count / 1000000).toStringAsFixed(1)}M';
   }
 
-  Widget _buildProfile(String profilePhoto, int index) {
-    return Container(
-      width: 50,
-      height: 50,
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.white, width: 2),
-        shape: BoxShape.circle,
-      ),
-      child: ClipOval(
-        child: Image.network(
-          profilePhoto,
-          fit: BoxFit.cover,
-          loadingBuilder: (context, child, loadingProgress) {
-            if (loadingProgress == null) return child;
-            return const Icon(Icons.person, color: Colors.white);
+  Widget _buildProfile(String userId, int index) {
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .snapshots(),
+      builder: (context, snapshot) {
+        String profilePhoto = '';
+        if (snapshot.hasData && snapshot.data!.exists) {
+          final userData = snapshot.data!.data() as Map<String, dynamic>;
+          profilePhoto = userData['image'] ?? '';
+        }
+
+        return GestureDetector(
+          onTap: () {
+            // Navigate to profile screen
+            Get.to(() => ProfileScreen(userId: userId));
           },
-          errorBuilder: (context, error, stackTrace) =>
-              const Icon(Icons.person, color: Colors.white),
-        ),
-      ),
+          child: Container(
+            width: 50,
+            height: 50,
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.white, width: 2),
+              shape: BoxShape.circle,
+            ),
+            child: ClipOval(
+              child: profilePhoto.isNotEmpty
+                  ? Image.network(
+                      profilePhoto,
+                      fit: BoxFit.cover,
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return const Icon(Icons.person, color: Colors.white);
+                      },
+                      errorBuilder: (context, error, stackTrace) =>
+                          const Icon(Icons.person, color: Colors.white),
+                    )
+                  : const Icon(Icons.person, color: Colors.white),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -420,13 +488,19 @@ class _VideoScreenState extends State<ForYouVideoScreen>
             children: [
               _buildTab(
                 'For You',
-                _selectedTab == 0,
-                () => setState(() => _selectedTab = 0),
+                true, // Always highlight since this is the ForYou screen
+                () {}, // No action needed
               ),
               _buildTab(
                 'Following',
-                _selectedTab == 1,
-                () => setState(() => _selectedTab = 1),
+                false, // Not selected
+                () {
+                  Get.to(
+                    () => FollowingScreen(
+                      userId: FirebaseAuth.instance.currentUser!.uid,
+                    ),
+                  );
+                },
               ),
               const Spacer(),
               _buildNotificationIcon(),
@@ -445,14 +519,48 @@ class _VideoScreenState extends State<ForYouVideoScreen>
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        data.userName ?? 'Unknown User',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                        stream: FirebaseFirestore.instance
+                            .collection('users')
+                            .doc(data.userId)
+                            .snapshots(),
+                        // Safe dummy stream
+                        builder: (context, snapshot) {
+                          if (!snapshot.hasData ||
+                              snapshot.data == null ||
+                              !snapshot.data!.exists) {
+                            return const Text(
+                              'Unknown User',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            );
+                          }
+
+                          final userData = snapshot.data!.data()!;
+                          final userName = userData['name'] ?? 'Unknown User';
+
+                          return Text(
+                            userName,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          );
+                        },
                       ),
+
+                      // Text(
+                      //   data.userName ?? 'Unknown User',
+                      //   style: const TextStyle(
+                      //     fontSize: 16,
+                      //     color: Colors.white,
+                      //     fontWeight: FontWeight.bold,
+                      //   ),
+                      // ),
                       const SizedBox(height: 8),
                       Text(
                         data.descriptionTags ?? 'No description',
@@ -493,7 +601,7 @@ class _VideoScreenState extends State<ForYouVideoScreen>
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    _buildProfile("${data.userProfileImage}", index),
+                    _buildProfile("${data.userId}", index),
                     const SizedBox(height: 20),
                     _buildActionButton(
                       (Icons.favorite_rounded),
@@ -547,6 +655,13 @@ class _VideoScreenState extends State<ForYouVideoScreen>
                         index,
                       ),
                     ),
+
+                    _buildActionButton(
+                      Icons.remove_red_eye_outlined,
+                      _formatCount(data.views ?? 0),
+                      Colors.white,
+                      () {},
+                    ),
                   ],
                 ),
               ),
@@ -561,9 +676,13 @@ class _VideoScreenState extends State<ForYouVideoScreen>
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
 
-    if (_selectedTab == 1) {
-      return FollowingScreen(userId: FirebaseAuth.instance.currentUser!.uid);
-    }
+    // if (_selectedTab == 1) {
+    //   return FollowingScreen(userId: FirebaseAuth.instance.currentUser!.uid);
+
+    //   // Get.to(
+    //   //   () => FollowingScreen(userId: FirebaseAuth.instance.currentUser!.uid),
+    //   // );
+    // }
 
     return Scaffold(
       backgroundColor: Colors.black,

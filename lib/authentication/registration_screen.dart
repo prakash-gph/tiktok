@@ -644,6 +644,10 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                     if (value.length < 3) {
                       return 'Username must be at least 3 characters';
                     }
+                    final regex = RegExp(r'^[a-z0-9_]+$');
+                    if (!regex.hasMatch(value)) {
+                      return 'Only lowercase letters & numbers,underscore(_) are allowed';
+                    }
                     return null;
                   },
                   isObscure: true,

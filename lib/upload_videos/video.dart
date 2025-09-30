@@ -1,3 +1,5 @@
+//import 'dart:ui';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class Video {
@@ -14,7 +16,7 @@ class Video {
   final String? videoUrl;
   final String? thumbnailUrl;
   final int? publishedDateTime;
-
+  final int? views;
   Video({
     this.userId,
     this.userName,
@@ -29,6 +31,7 @@ class Video {
     this.videoUrl,
     this.thumbnailUrl,
     this.publishedDateTime,
+    this.views,
   });
 
   Map<String, dynamic> toJson() => {
@@ -45,6 +48,7 @@ class Video {
     "videoUrl": videoUrl,
     "thumbnailUrl": thumbnailUrl,
     "publishedDateTime": publishedDateTime,
+    "views": views,
   };
 
   static Video fromDocumentSnapshot(DocumentSnapshot snapshot) {
@@ -63,6 +67,7 @@ class Video {
       videoUrl: docSnapshot["videoUrl"],
       thumbnailUrl: docSnapshot["thumbnailUrl"],
       publishedDateTime: docSnapshot["publishedDateTime"],
+      views: docSnapshot["views"],
 
       //isLiked: docSnapshot["isLiked"],
     );

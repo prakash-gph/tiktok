@@ -10,4 +10,7 @@ import UIKit
     GeneratedPluginRegistrant.register(with: self)
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
+  FirebaseApp.configure()
+         AppCheck.setAppCheckProviderFactory(DeviceCheckProviderFactory())
+
 }

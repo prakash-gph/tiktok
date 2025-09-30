@@ -1,4 +1,3 @@
-// lib/screens/edit_profile_screen.dart
 import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -37,8 +36,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   @override
   void initState() {
     super.initState();
-    _usernameController.text = "${widget.user.name}";
-    // _bioController.text = widget.user.bio;
+    _usernameController.text = widget.user.name ?? "";
+    _bioController.text = widget.user.bio ?? "";
   }
 
   @override
@@ -68,87 +67,133 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Future<String?> _uploadImage() async {
-    if (_imageFile == null) return null;
+    if (_imageFile == null) {
+      debugPrint(
+        "No image selected - this is normal if user didn't change image=================================",
+      );
+      return null;
+    }
 
     try {
       final userId = _auth.currentUser!.uid;
       final ref = _storage.ref().child(
         'profile_images/$userId-${DateTime.now().millisecondsSinceEpoch}',
       );
+      debugPrint("$ref-----------------------------------------------------");
       final uploadTask = ref.putFile(_imageFile!);
-      final snapshot = await uploadTask.whenComplete(() => null);
+      final snapshot = await uploadTask;
       return await snapshot.ref.getDownloadURL();
+    } on FirebaseException catch (e) {
+      debugPrint("❌ Firebase Storage error: ${e.code} - ${e.message}");
+      return null;
     } catch (e) {
-      setState(() {
-        _errorMessage = 'Failed to upload image: $e';
-      });
+      debugPrint("Image upload error: $e");
       return null;
     }
   }
 
   Future<void> _saveProfile() async {
     if (_usernameController.text.isEmpty) {
-      setState(() {
-        _errorMessage = 'Username cannot be empty';
-      });
+      if (mounted) setState(() => _errorMessage = 'Username cannot be empty');
+      return;
+    }
+    final regex = RegExp(r'^[a-z0-9_]+$');
+    if (!regex.hasMatch(_usernameController.text)) {
+      if (mounted) {
+        setState(
+          () => _errorMessage =
+              'Only lowercase letters & numbers,underscore(_) are allowed',
+        );
+      }
+      return;
+    }
+    final bio = _bioController.text.trim();
+    if (bio.length > 150) {
+      if (mounted) {
+        setState(() => _errorMessage = 'Bio cannot exceed 150 characters');
+      }
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-      _errorMessage = '';
-    });
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = '';
+      });
+    }
 
     try {
       final userId = _auth.currentUser!.uid;
       final String? imageUrl = await _uploadImage();
 
-      await _firestore.collection('users').doc(userId).update({
+      final updateData = {
         'name': _usernameController.text.trim(),
         'bio': _bioController.text.trim(),
-        if (imageUrl != null) 'image': imageUrl,
         'updatedAt': FieldValue.serverTimestamp(),
-      });
+      };
 
-      // Call the callback to refresh the profile
-      widget.onProfileUpdated();
+      if (imageUrl != null) {
+        updateData['image'] = imageUrl;
+      }
 
-      // Show success message
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Profile updated successfully'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      await _firestore.collection('users').doc(userId).update(updateData);
 
-      // Navigate back
+      await widget.onProfileUpdated();
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Profile updated successfully')));
+
       Navigator.of(context).pop();
     } catch (e) {
-      setState(() {
-        _errorMessage = 'Failed to update profile: $e';
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          //   _errorMessage = 'Failed to update profile: $e';
+
+          _isLoading = false;
+          Navigator.of(context).pop();
+        });
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: Colors.black,
-        title: Text('Edit Profile', style: TextStyle(color: Colors.white)),
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
+        title: Text(
+          'Edit Profile',
+          style: TextStyle(
+            color: Theme.of(context).appBarTheme.foregroundColor,
+          ),
+        ),
+        iconTheme: IconThemeData(
+          color: Theme.of(context).appBarTheme.foregroundColor,
+        ),
         actions: [
           IconButton(
-            icon: Icon(Icons.check, color: Colors.white),
+            icon: Icon(
+              Icons.check,
+              color: Theme.of(context).appBarTheme.foregroundColor,
+            ),
             onPressed: _isLoading ? null : _saveProfile,
           ),
         ],
       ),
       body: _isLoading
-          ? Center(child: CircularProgressIndicator(color: Colors.red))
+          ? Center(
+              child: CircularProgressIndicator(
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.white
+                    : Colors.black,
+              ),
+            )
           : SingleChildScrollView(
-              padding: EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
                   // Profile Image
@@ -162,16 +207,21 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           height: 120,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 2),
+                            border: Border.all(
+                              color: isDarkMode ? Colors.white : Colors.black,
+                              width: 2,
+                            ),
                           ),
                           child: ClipOval(
                             child: _imageFile != null
                                 ? Image.file(_imageFile!, fit: BoxFit.cover)
                                 : CachedNetworkImage(
-                                    imageUrl: "${widget.user.image}",
+                                    imageUrl: widget.user.image ?? "",
                                     fit: BoxFit.cover,
                                     placeholder: (context, url) => Container(
-                                      color: Colors.grey[800],
+                                      color: isDarkMode
+                                          ? Colors.grey[800]
+                                          : Colors.grey[300],
                                       child: Center(
                                         child: CircularProgressIndicator(
                                           color: Colors.red,
@@ -180,10 +230,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                     ),
                                     errorWidget: (context, url, error) =>
                                         Container(
-                                          color: Colors.grey[800],
+                                          color: isDarkMode
+                                              ? Colors.grey[800]
+                                              : Colors.grey[300],
                                           child: Icon(
                                             Icons.person,
-                                            color: Colors.white,
+                                            color: isDarkMode
+                                                ? Colors.white
+                                                : Colors.black,
                                             size: 40,
                                           ),
                                         ),
@@ -195,7 +249,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           height: 120,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            // ignore: deprecated_member_use
                             color: Colors.black.withOpacity(0.5),
                           ),
                           child: Icon(
@@ -207,58 +260,92 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       ],
                     ),
                   ),
-                  SizedBox(height: 24),
+                  const SizedBox(height: 24),
 
                   // Username Field
                   TextFormField(
                     controller: _usernameController,
-                    style: TextStyle(color: Colors.white),
+                    style: TextStyle(
+                      color: Theme.of(context).textTheme.bodyLarge?.color,
+                    ),
                     decoration: InputDecoration(
                       labelText: 'Username',
-                      labelStyle: TextStyle(color: Colors.grey),
+                      labelStyle: TextStyle(
+                        color: Theme.of(
+                          context,
+                        ).textTheme.bodyLarge?.color?.withOpacity(0.6),
+                      ),
                       enabledBorder: OutlineInputBorder(
-                        borderSide: BorderSide(color: Colors.grey),
+                        borderSide: BorderSide(
+                          color:
+                              Theme.of(
+                                context,
+                              ).textTheme.bodyLarge?.color?.withOpacity(0.3) ??
+                              Colors.grey,
+                        ),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       focusedBorder: OutlineInputBorder(
-                        borderSide: BorderSide(color: Colors.red),
+                        borderSide: const BorderSide(color: Colors.red),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       filled: true,
-                      fillColor: Colors.grey[900],
+                      fillColor: isDarkMode
+                          ? Colors.grey[900]
+                          : Colors.grey[100],
                     ),
                   ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
 
                   // Bio Field
                   TextFormField(
                     controller: _bioController,
-                    style: TextStyle(color: Colors.white),
+                    style: TextStyle(
+                      color: Theme.of(context).textTheme.bodyLarge?.color,
+                    ),
                     maxLines: 3,
+                    maxLength: 150,
                     decoration: InputDecoration(
                       labelText: 'Bio',
-                      labelStyle: TextStyle(color: Colors.grey),
+                      labelStyle: TextStyle(
+                        color: Theme.of(
+                          context,
+                        ).textTheme.bodyLarge?.color?.withOpacity(0.6),
+                      ),
                       enabledBorder: OutlineInputBorder(
-                        borderSide: BorderSide(color: Colors.grey),
+                        borderSide: BorderSide(
+                          color:
+                              Theme.of(
+                                context,
+                              ).textTheme.bodyLarge?.color?.withOpacity(0.3) ??
+                              Colors.grey,
+                        ),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       focusedBorder: OutlineInputBorder(
-                        borderSide: BorderSide(color: Colors.red),
+                        borderSide: const BorderSide(color: Colors.red),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       filled: true,
-                      fillColor: Colors.grey[900],
+                      fillColor: isDarkMode
+                          ? Colors.grey[900]
+                          : Colors.grey[100],
+                      counterText: '${_bioController.text.length}/150',
                     ),
+                    onChanged: (_) {
+                      if (mounted) setState(() {}); // updates live counter
+                    },
                   ),
-                  SizedBox(height: 16),
+
+                  const SizedBox(height: 16),
 
                   // Error Message
                   if (_errorMessage.isNotEmpty)
                     Padding(
-                      padding: EdgeInsets.symmetric(vertical: 8),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
                       child: Text(
                         _errorMessage,
-                        style: TextStyle(color: Colors.red),
+                        style: const TextStyle(color: Colors.red),
                         textAlign: TextAlign.center,
                       ),
                     ),
@@ -271,12 +358,45 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.red,
                         foregroundColor: Colors.white,
-                        padding: EdgeInsets.symmetric(vertical: 16),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
                       ),
-                      child: Text('Save Changes'),
+                      child: const Text('Save Changes'),
+                    ),
+                  ),
+
+                  // Additional Info
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: isDarkMode ? Colors.grey[900] : Colors.grey[100],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.info_outline,
+                          color: Theme.of(
+                            context,
+                          ).textTheme.bodyLarge?.color?.withOpacity(0.6),
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Your profile information will be visible to other users',
+                            style: TextStyle(
+                              color: Theme.of(
+                                context,
+                              ).textTheme.bodyLarge?.color?.withOpacity(0.6),
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
