@@ -72,6 +72,7 @@
 // }
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
 
 import 'package:get/get.dart';
 import 'package:tiktok/authentication/authentication_controller.dart';
@@ -202,7 +203,7 @@ class NotificationController extends GetxController {
         'timestamp': FieldValue.serverTimestamp(),
       });
     } catch (e) {
-      print("Error creating notification: $e");
+      debugPrint("Error creating notification: $e");
     }
   }
 
