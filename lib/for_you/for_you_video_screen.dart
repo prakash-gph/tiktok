@@ -9,7 +9,6 @@ import 'package:tiktok/follow_service/follow_service.dart';
 import 'package:tiktok/for_you/custom_scroll_physics.dart';
 import 'package:tiktok/for_you/like_animation.dart';
 import 'package:tiktok/for_you/save_videos/saved_video_controller.dart';
-import 'package:tiktok/for_you/save_videos/saved_video_model.dart';
 import 'package:tiktok/profile/profile_screen.dart';
 import 'package:tiktok/share_vieos/share_videos.models.dart';
 import 'package:tiktok/upload_videos/get_video_url_controller.dart';
