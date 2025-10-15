@@ -123,6 +123,8 @@
 
 //  add theme
 
+// ignore_for_file: library_private_types_in_public_api
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -133,8 +135,7 @@ class FollowListScreen extends StatefulWidget {
   final String userId;
   final String mode; // 'followers' or 'following'
 
-  const FollowListScreen({Key? key, required this.userId, required this.mode})
-    : super(key: key);
+  const FollowListScreen({super.key, required this.userId, required this.mode});
 
   @override
   _FollowListScreenState createState() => _FollowListScreenState();

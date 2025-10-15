@@ -17,6 +17,31 @@ class Video {
   final String? thumbnailUrl;
   final int? publishedDateTime;
   final int? views;
+
+  List<dynamic> get safeLikesList {
+    if (likesList is List) return likesList ?? [];
+    if (likesList is int) return []; // Return empty list if it's an int
+    return [];
+  }
+
+  int get safeTotalComments {
+    if (totalComments is int) return totalComments ?? 0;
+    if (totalComments is List) return totalComments ?? 0;
+    return 0;
+  }
+
+  int get safeTotalShares {
+    if (totalShares is int) return totalShares ?? 0;
+    if (totalShares is List) return totalShares ?? 0;
+    return 0;
+  }
+
+  int get safeViews {
+    if (views is int) return views ?? 0;
+    if (views is List) return views ?? 0;
+    return 0;
+  }
+
   Video({
     this.userId,
     this.userName,
@@ -27,7 +52,7 @@ class Video {
     this.totalComments,
     this.totalShares,
     this.descriptionTags,
-    // this.isLiked,
+
     this.videoUrl,
     this.thumbnailUrl,
     this.publishedDateTime,
@@ -44,7 +69,7 @@ class Video {
     "totalComments": totalComments,
     "totalShares": totalShares,
     "descriptionTags": descriptionTags,
-    //"isLiked":isLiked,
+
     "videoUrl": videoUrl,
     "thumbnailUrl": thumbnailUrl,
     "publishedDateTime": publishedDateTime,
@@ -52,7 +77,7 @@ class Video {
   };
 
   static Video fromDocumentSnapshot(DocumentSnapshot snapshot) {
-    var docSnapshot = snapshot.data() as Map<String, dynamic>;
+    var docSnapshot = snapshot.data() as Map<String, dynamic>? ?? {};
 
     return Video(
       userId: docSnapshot["userId"],
@@ -68,8 +93,6 @@ class Video {
       thumbnailUrl: docSnapshot["thumbnailUrl"],
       publishedDateTime: docSnapshot["publishedDateTime"],
       views: docSnapshot["views"],
-
-      //isLiked: docSnapshot["isLiked"],
     );
   }
 }

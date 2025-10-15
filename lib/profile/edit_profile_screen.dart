@@ -1,3 +1,5 @@
+// ignore_for_file: library_private_types_in_public_api
+
 import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -12,10 +14,10 @@ class EditProfileScreen extends StatefulWidget {
   final Function onProfileUpdated;
 
   const EditProfileScreen({
-    Key? key,
+    super.key,
     required this.user,
     required this.onProfileUpdated,
-  }) : super(key: key);
+  });
 
   @override
   _EditProfileScreenState createState() => _EditProfileScreenState();

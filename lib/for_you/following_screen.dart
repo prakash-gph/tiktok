@@ -1,828 +1,890 @@
-// import 'package:flutter/material.dart';
-// import 'package:cloud_firestore/cloud_firestore.dart';
-// import 'package:cached_network_image/cached_network_image.dart';
-// import 'package:tiktok/authentication/user.dart';
-// import 'package:tiktok/profile/profile_screen.dart';
-// import 'package:tiktok/follow_service/follow_service.dart';
-// import 'package:firebase_auth/firebase_auth.dart';
-
-// class FollowingScreen extends StatefulWidget {
-//   final String userId;
-
-//   const FollowingScreen({super.key, required this.userId});
-
-//   @override
-//   // ignore: library_private_types_in_public_api
-//   _FollowingScreenState createState() => _FollowingScreenState();
-// }
-
-// class _FollowingScreenState extends State<FollowingScreen> {
-//   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-//   final FirebaseAuth _auth = FirebaseAuth.instance;
-//   final FollowService _followService = FollowService();
-
-//   // ignore: unused_field
-//   AppUser? _currentUser;
-//   bool _isLoading = true;
-//   final Map<String, bool> _unfollowLoadingStates = {};
-
-//   @override
-//   void initState() {
-//     super.initState();
-//     _loadUserData();
-//   }
-
-//   Future<void> _loadUserData() async {
-//     try {
-//       final userDoc = await _firestore
-//           .collection('users')
-//           .doc(widget.userId)
-//           .get();
-//       if (userDoc.exists) {
-//         setState(() {
-//           _currentUser = AppUser.fromSnap(userDoc);
-//         });
-//       }
-//       setState(() => _isLoading = false);
-//     } catch (e) {
-//       print('Error loading user data: $e');
-//       setState(() => _isLoading = false);
-//     }
-//   }
-
-//   Future<void> _unfollowUser(String targetUserId) async {
-//     setState(() {
-//       _unfollowLoadingStates[targetUserId] = true;
-//     });
-
-//     try {
-//       await _followService.unfollowUser(targetUserId);
-//       // Show success feedback
-//       ScaffoldMessenger.of(context).showSnackBar(
-//         SnackBar(
-//           content: Text('Unfollowed successfully'),
-//           backgroundColor: Colors.green,
-//         ),
-//       );
-//     } catch (e) {
-//       // Show error feedback
-//       ScaffoldMessenger.of(context).showSnackBar(
-//         SnackBar(
-//           content: Text('Error unfollowing user'),
-//           backgroundColor: Colors.red,
-//         ),
-//       );
-//     }
-
-//     setState(() {
-//       _unfollowLoadingStates[targetUserId] = false;
-//     });
-//   }
-
-//   Future<void> _confirmUnfollow(String targetUserId, String username) async {
-//     final bool? confirm = await showDialog(
-//       context: context,
-//       builder: (BuildContext context) {
-//         return AlertDialog(
-//           title: Text(
-//             'Unfollow $username?',
-//             style: TextStyle(color: Colors.white),
-//           ),
-//           content: Text(
-//             'They will no longer be able to view your exclusive content.',
-//             style: TextStyle(color: Colors.white70),
-//           ),
-//           backgroundColor: Colors.grey[900],
-//           actions: [
-//             TextButton(
-//               onPressed: () => Navigator.of(context).pop(false),
-//               child: Text('Cancel', style: TextStyle(color: Colors.white)),
-//             ),
-//             TextButton(
-//               onPressed: () => Navigator.of(context).pop(true),
-//               child: Text('Unfollow', style: TextStyle(color: Colors.red)),
-//             ),
-//           ],
-//         );
-//       },
-//     );
-
-//     if (confirm == true) {
-//       _unfollowUser(targetUserId);
-//     }
-//   }
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return Scaffold(
-//       backgroundColor: Colors.black,
-//       appBar: AppBar(
-//         backgroundColor: Colors.black,
-//         elevation: 0,
-//         title: Text(
-//           'Following',
-//           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-//         ),
-//         // leading: IconButton(
-//         //   icon: Icon(Icons.arrow_back, color: Colors.white),
-//         //   onPressed: () => Navigator.of(context).pop(),
-//         // ),
-//       ),
-//       body: _isLoading
-//           ? Center(child: CircularProgressIndicator(color: Colors.red))
-//           : StreamBuilder<QuerySnapshot>(
-//               stream: _firestore
-//                   .collection('users')
-//                   .doc(widget.userId)
-//                   .collection("following")
-//                   .snapshots(),
-//               builder: (context, snapshot) {
-//                 if (!snapshot.hasData) {
-//                   return Center(
-//                     child: CircularProgressIndicator(color: Colors.red),
-//                   );
-//                 }
-
-//                 if (snapshot.data!.docs.isEmpty) {
-//                   return Center(
-//                     child: Column(
-//                       mainAxisAlignment: MainAxisAlignment.center,
-//                       children: [
-//                         Icon(Icons.group, color: Colors.grey, size: 64),
-//                         SizedBox(height: 16),
-//                         Text(
-//                           'Not following anyone yet',
-//                           style: TextStyle(color: Colors.grey, fontSize: 16),
-//                         ),
-//                         SizedBox(height: 8),
-//                         Text(
-//                           'Users you follow will appear here',
-//                           style: TextStyle(color: Colors.grey, fontSize: 14),
-//                         ),
-//                       ],
-//                     ),
-//                   );
-//                 }
-
-//                 return ListView.builder(
-//                   padding: EdgeInsets.symmetric(vertical: 8),
-//                   itemCount: snapshot.data!.docs.length,
-//                   itemBuilder: (context, index) {
-//                     final followerDoc = snapshot.data!.docs[index];
-//                     return FutureBuilder<DocumentSnapshot>(
-//                       future: _firestore
-//                           .collection('users')
-//                           .doc(followerDoc.id)
-//                           .get(),
-//                       builder: (context, userSnapshot) {
-//                         if (!userSnapshot.hasData) {
-//                           return _buildUserItemShimmer();
-//                         }
-
-//                         if (!userSnapshot.data!.exists) {
-//                           return ListTile(
-//                             title: Text(
-//                               'User not found',
-//                               style: TextStyle(color: Colors.grey),
-//                             ),
-//                           );
-//                         }
-
-//                         final user = AppUser.fromSnap(userSnapshot.data!);
-//                         final isCurrentUser =
-//                             _auth.currentUser?.uid == widget.userId;
-//                         final isLoading =
-//                             _unfollowLoadingStates[user.uid] ?? false;
-
-//                         return _buildUserItem(user, isCurrentUser, isLoading);
-//                       },
-//                     );
-//                   },
-//                 );
-//               },
-//             ),
-//     );
-//   }
-
-//   Widget _buildUserItemShimmer() {
-//     return Container(
-//       margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-//       padding: EdgeInsets.all(12),
-//       decoration: BoxDecoration(
-//         color: Colors.grey[900],
-//         borderRadius: BorderRadius.circular(16),
-//       ),
-//       child: Row(
-//         children: [
-//           Container(
-//             width: 50,
-//             height: 50,
-//             decoration: BoxDecoration(
-//               color: Colors.grey[800],
-//               shape: BoxShape.circle,
-//             ),
-//           ),
-//           SizedBox(width: 16),
-//           Expanded(
-//             child: Column(
-//               crossAxisAlignment: CrossAxisAlignment.start,
-//               children: [
-//                 Container(width: 120, height: 16, color: Colors.grey[800]),
-//                 SizedBox(height: 8),
-//                 Container(width: 80, height: 12, color: Colors.grey[800]),
-//               ],
-//             ),
-//           ),
-//           Container(
-//             width: 80,
-//             height: 32,
-//             decoration: BoxDecoration(
-//               color: Colors.grey[800],
-//               borderRadius: BorderRadius.circular(16),
-//             ),
-//           ),
-//         ],
-//       ),
-//     );
-//   }
-
-//   Widget _buildUserItem(AppUser user, bool isCurrentUser, bool isLoading) {
-//     return Container(
-//       margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-//       decoration: BoxDecoration(
-//         color: Colors.grey[900],
-//         borderRadius: BorderRadius.circular(16),
-//         boxShadow: [
-//           BoxShadow(
-//             // ignore: deprecated_member_use
-//             color: Colors.black.withOpacity(0.2),
-//             blurRadius: 4,
-//             offset: Offset(0, 2),
-//           ),
-//         ],
-//       ),
-//       child: Material(
-//         color: Colors.transparent,
-//         child: InkWell(
-//           borderRadius: BorderRadius.circular(16),
-//           onTap: () {
-//             Navigator.push(
-//               context,
-//               MaterialPageRoute(
-//                 builder: (context) =>
-//                     ProfileScreen(userId: "${user.uid}", isCurrentUser: false),
-//               ),
-//             );
-//           },
-//           child: Padding(
-//             padding: EdgeInsets.all(12),
-//             child: Row(
-//               children: [
-//                 // Profile Avatar
-//                 Hero(
-//                   tag: 'profile_${user.uid}',
-//                   child: CircleAvatar(
-//                     radius: 25,
-//                     backgroundImage: CachedNetworkImageProvider(
-//                       "${user.image}",
-//                     ),
-//                     backgroundColor: Colors.grey[800],
-//                   ),
-//                 ),
-//                 SizedBox(width: 16),
-
-//                 // User Info
-//                 Expanded(
-//                   child: Column(
-//                     crossAxisAlignment: CrossAxisAlignment.start,
-//                     children: [
-//                       Text(
-//                         "${user.name}",
-//                         style: TextStyle(
-//                           color: Colors.white,
-//                           fontSize: 16,
-//                           fontWeight: FontWeight.w600,
-//                         ),
-//                         maxLines: 1,
-//                         overflow: TextOverflow.ellipsis,
-//                       ),
-//                       SizedBox(height: 4),
-//                       FutureBuilder<int>(
-//                         future: _followService.getFollowersCount("${user.uid}"),
-//                         builder: (context, snapshot) {
-//                           final followers = snapshot.data ?? 0;
-
-//                           // ignore: no_leading_underscores_for_local_identifiers
-//                           String _formatCount(int count) {
-//                             if (count < 1000) return count.toString();
-//                             if (count < 1000000)
-//                               // ignore: curly_braces_in_flow_control_structures
-//                               return '${(count / 1000).toStringAsFixed(1)}K';
-//                             return '${(count / 1000000).toStringAsFixed(1)}M';
-//                           }
-
-//                           return Text(
-//                             '${_formatCount(followers)} followers',
-//                             style: TextStyle(
-//                               color: Colors.grey[400],
-//                               fontSize: 14,
-//                             ),
-//                           );
-//                         },
-//                       ),
-//                     ],
-//                   ),
-//                 ),
-
-//                 // Unfollow Button (only shown if current user is viewing their own following)
-//                 if (isCurrentUser)
-//                   isLoading
-//                       ? Container(
-//                           width: 32,
-//                           height: 32,
-//                           padding: EdgeInsets.all(6),
-//                           child: CircularProgressIndicator(
-//                             strokeWidth: 2,
-//                             color: Colors.white,
-//                           ),
-//                         )
-//                       : IconButton(
-//                           icon: Icon(
-//                             Icons.person_remove,
-//                             color: Colors.grey[400],
-//                           ),
-//                           onPressed: () {
-//                             _confirmUnfollow("${user.uid}", "${user.name}");
-//                           },
-//                         ),
-//               ],
-//             ),
-//           ),
-//         ),
-//       ),
-//     );
-//   }
-// }
-
-// add theme ------------>
-
-import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'package:ionicons/ionicons.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:tiktok/authentication/authentication_controller.dart';
 import 'package:tiktok/authentication/user.dart';
-import 'package:tiktok/profile/profile_screen.dart';
+import 'package:tiktok/comments/comments_screen.dart';
 import 'package:tiktok/follow_service/follow_service.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:tiktok/for_you/custom_scroll_physics.dart';
+import 'package:tiktok/for_you/like_animation.dart';
+import 'package:tiktok/for_you/save_videos/saved_video_controller.dart';
+import 'package:tiktok/profile/profile_screen.dart';
+import 'package:tiktok/share_vieos/share_videos.models.dart';
+import 'package:tiktok/upload_videos/get_video_url_controller.dart';
+import 'package:tiktok/upload_videos/video.dart';
+import 'package:tiktok/upload_videos/video_palyer_item.dart';
+import 'package:tiktok/widgets/circle_animation_profile.dart';
 
 class FollowingScreen extends StatefulWidget {
   final String userId;
-
   const FollowingScreen({super.key, required this.userId});
 
   @override
-  _FollowingScreenState createState() => _FollowingScreenState();
+  State<FollowingScreen> createState() => FollowingScreenState();
 }
 
-class _FollowingScreenState extends State<FollowingScreen> {
+class FollowingScreenState extends State<FollowingScreen>
+    with SingleTickerProviderStateMixin {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final GetVideoUrlController videoController = Get.put(
+    GetVideoUrlController(),
+  );
   final FollowService _followService = FollowService();
+  final String authUserId = AuthenticationController.instanceAuth.user.uid;
 
-  AppUser? _currentUser;
+  final PageController _pageController = PageController();
+  int _currentPage = 0;
+  bool _isVideoPaused = false;
+
+  OverlayEntry? _likeAnimationOverlay;
+  late AnimationController _animationController;
+  final Set<String> _viewedVideos = {};
+
+  List<VideoItem> followingVideos = [];
   bool _isLoading = true;
-  final Map<String, bool> _unfollowLoadingStates = {};
+  bool _isDisposed = false;
 
   @override
   void initState() {
     super.initState();
-    _loadUserData();
-  }
-
-  Future<void> _loadUserData() async {
-    try {
-      final userDoc = await _firestore
-          .collection('users')
-          .doc(widget.userId)
-          .get();
-      if (userDoc.exists) {
-        setState(() {
-          _currentUser = AppUser.fromSnap(userDoc);
-        });
-      }
-      setState(() => _isLoading = false);
-    } catch (e) {
-      print('Error loading user data: $e');
-      setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> _unfollowUser(String targetUserId) async {
-    setState(() {
-      _unfollowLoadingStates[targetUserId] = true;
-    });
-
-    try {
-      await _followService.unfollowUser(targetUserId);
-      // Show success feedback
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Unfollowed successfully',
-            style: TextStyle(
-              color: Theme.of(context).brightness == Brightness.dark
-                  ? Colors.white
-                  : Colors.black,
-            ),
-          ),
-          backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    } catch (e) {
-      // Show error feedback
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Error unfollowing user',
-            style: TextStyle(
-              color: Theme.of(context).brightness == Brightness.dark
-                  ? Colors.white
-                  : Colors.black,
-            ),
-          ),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
-
-    setState(() {
-      _unfollowLoadingStates[targetUserId] = false;
-    });
-  }
-
-  Future<void> _confirmUnfollow(String targetUserId, String username) async {
-    final bool? confirm = await showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text(
-            'Unfollow $username?',
-            style: TextStyle(
-              color: Theme.of(context).textTheme.bodyLarge?.color,
-            ),
-          ),
-          content: Text(
-            'They will no longer be able to view your exclusive content.',
-            style: TextStyle(
-              color: Theme.of(
-                context,
-              ).textTheme.bodyLarge?.color?.withOpacity(0.7),
-            ),
-          ),
-          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: Text(
-                'Cancel',
-                style: TextStyle(
-                  color: Theme.of(context).textTheme.bodyLarge?.color,
-                ),
-              ),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text(
-                'Unfollow',
-                style: TextStyle(color: Colors.red),
-              ),
-            ),
-          ],
-        );
-      },
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
     );
-
-    if (confirm == true) {
-      _unfollowUser(targetUserId);
-    }
+    _loadFollowingVideos();
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: AppBar(
-        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
-        elevation: 0,
-        title: Text(
-          'Following',
-          style: TextStyle(
-            color: Theme.of(context).appBarTheme.foregroundColor,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        iconTheme: IconThemeData(
-          color: Theme.of(context).appBarTheme.foregroundColor,
+  void dispose() {
+    _isDisposed = true;
+    _removeLikeAnimation();
+    _animationController.dispose();
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadFollowingVideos() async {
+    try {
+      final followingSnapshot = await _firestore
+          .collection('users')
+          .doc(widget.userId)
+          .collection('following')
+          .get();
+
+      if (followingSnapshot.docs.isEmpty) {
+        if (!_isDisposed) {
+          setState(() => _isLoading = false);
+        }
+        return;
+      }
+
+      List<String> followingIds = followingSnapshot.docs
+          .map((doc) => doc.id)
+          .toList();
+
+      List<VideoItem> loadedVideos = [];
+
+      for (int i = 0; i < followingIds.length; i += 10) {
+        final batch = followingIds.skip(i).take(10).toList();
+        final videosSnapshot = await _firestore
+            .collection('videos')
+            .where('userId', whereIn: batch)
+            .orderBy('publishedDateTime', descending: true)
+            .get();
+
+        for (var doc in videosSnapshot.docs) {
+          final videoData = Video.fromDocumentSnapshot(doc);
+          final userDoc = await _firestore
+              .collection('users')
+              .doc(videoData.userId)
+              .get();
+
+          if (userDoc.exists) {
+            final user = AppUser.fromSnap(userDoc);
+            loadedVideos.add(VideoItem(video: videoData, user: user));
+          }
+        }
+      }
+
+      if (!_isDisposed) {
+        setState(() {
+          followingVideos = loadedVideos;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading following videos: $e');
+      if (!_isDisposed) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  void _togglePlayPause() {
+    if (!_isDisposed) {
+      setState(() => _isVideoPaused = !_isVideoPaused);
+    }
+  }
+
+  Future<void> _incrementVideoViews(String videoId) async {
+    if (_viewedVideos.contains(videoId) || _isDisposed) return;
+
+    try {
+      await _firestore.collection('videos').doc(videoId).update({
+        'views': FieldValue.increment(1),
+      });
+      _viewedVideos.add(videoId);
+    } catch (e) {
+      debugPrint('Failed to increment views: $e');
+    }
+  }
+
+  void _onPageChanged(int index) {
+    if (_isDisposed) return;
+
+    setState(() {
+      _currentPage = index;
+      _isVideoPaused = false;
+    });
+
+    if (index < followingVideos.length) {
+      _incrementVideoViews(followingVideos[index].video.videoId!);
+    }
+  }
+
+  void _showLikeAnimation() {
+    if (_isDisposed) return;
+    _removeLikeAnimation();
+
+    final renderBox = context.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
+    final position = renderBox.localToGlobal(
+      Offset(renderBox.size.width / 2, renderBox.size.height / 2),
+    );
+
+    _likeAnimationOverlay = OverlayEntry(
+      builder: (_) => Positioned(
+        top: position.dy - 50,
+        left: position.dx - 50,
+        child: LikeAnimation(
+          controller: _animationController,
+          onComplete: _removeLikeAnimation,
         ),
       ),
-      body: _isLoading
-          ? Center(
-              child: CircularProgressIndicator(
-                color: Theme.of(context).brightness == Brightness.dark
-                    ? Colors.white
-                    : Colors.black,
-              ),
-            )
-          : StreamBuilder<QuerySnapshot>(
-              stream: _firestore
-                  .collection('users')
-                  .doc(widget.userId)
-                  .collection("following")
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) {
-                  return Center(
-                    child: CircularProgressIndicator(
-                      color: Theme.of(context).brightness == Brightness.dark
-                          ? Colors.white
-                          : Colors.black,
-                    ),
-                  );
-                }
+    );
 
-                if (snapshot.data!.docs.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.group,
-                          color: Theme.of(
-                            context,
-                          ).textTheme.bodyLarge?.color?.withOpacity(0.5),
-                          size: 64,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Not following anyone yet',
-                          style: TextStyle(
-                            color: Theme.of(
-                              context,
-                            ).textTheme.bodyLarge?.color?.withOpacity(0.7),
-                            fontSize: 16,
+    Overlay.of(context).insert(_likeAnimationOverlay!);
+    _animationController
+      ..reset()
+      ..forward();
+  }
+
+  void _removeLikeAnimation() {
+    if (_isDisposed) return;
+
+    _likeAnimationOverlay?.remove();
+    _likeAnimationOverlay = null;
+
+    // Only reset if controller is still valid
+    if (!_animationController.isDismissed && _animationController.isCompleted) {
+      _animationController.reset();
+    }
+  }
+
+  void _shareVideo(
+    String videoUrl,
+    String description,
+    String videoId,
+    String ownerId,
+  ) async {
+    if (_isDisposed) return;
+
+    try {
+      await Share.share(
+        'Check out this video: $videoUrl\n$description',
+        subject: 'TikTok Video',
+      );
+      shareVideoAndTrack(videoId, ownerId);
+    } catch (e) {
+      debugPrint('Share error: $e');
+    }
+  }
+
+  String _formatCount(int count) {
+    if (count < 1000) return count.toString();
+    if (count < 1000000) return '${(count / 1000).toStringAsFixed(1)}K';
+    return '${(count / 1000000).toStringAsFixed(1)}M';
+  }
+
+  Widget _buildProfile(String userId, String userName) {
+    return GestureDetector(
+      onTap: () {
+        if (!_isVideoPaused) {
+          setState(() => _isVideoPaused = true);
+        }
+
+        Get.to(() => ProfileScreen(userId: userId, isCurrentUser: false))?.then(
+          (_) {
+            if (mounted) {
+              setState(() => _isVideoPaused = false);
+            }
+          },
+        );
+      },
+
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          StreamBuilder<DocumentSnapshot>(
+            stream: _firestore.collection('users').doc(userId).snapshots(),
+            builder: (context, snapshot) {
+              String profilePhoto = '';
+              if (snapshot.hasData && snapshot.data!.exists) {
+                final data = snapshot.data!.data() as Map<String, dynamic>;
+                profilePhoto = data['image'] ?? '';
+              }
+
+              return Container(
+                width: 33,
+                height: 33,
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.white, width: 2),
+                  shape: BoxShape.circle,
+                ),
+                child: ClipOval(
+                  child: profilePhoto.isNotEmpty
+                      ? Image.network(
+                          profilePhoto,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) =>
+                              const Icon(Icons.person, color: Colors.white),
+                        )
+                      : const Icon(Icons.person, color: Colors.white, size: 5),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButton({
+    required IconData icon,
+    required String count,
+    required Color color,
+    required VoidCallback onTap,
+    double size = 28,
+  }) {
+    return SizedBox(
+      width: 60,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          GestureDetector(
+            onTap: onTap,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.3),
+                shape: BoxShape.circle,
+              ),
+              padding: const EdgeInsets.all(10),
+              child: Icon(icon, size: size, color: color),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            count,
+            style: const TextStyle(
+              fontSize: 12,
+              color: Colors.white,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFollowButton(String userId) {
+    // Hide the button if it's the current user's own profile
+    if (userId == authUserId) return const SizedBox.shrink();
+
+    return FutureBuilder<bool>(
+      future: _followService.isFollowing(userId),
+      builder: (context, snapshot) {
+        final bool isFollowing = snapshot.data ?? false;
+        final bool isInitialLoading =
+            snapshot.connectionState == ConnectionState.waiting;
+
+        return StatefulBuilder(
+          builder: (context, setInnerState) {
+            bool isLoading = false;
+
+            Future<void> handleFollowAction() async {
+              setInnerState(() => isLoading = true);
+              try {
+                if (isFollowing) {
+                  await _followService.unfollowUser(userId);
+                } else {
+                  await _followService.followUser(userId);
+                }
+              } finally {
+                setInnerState(() => isLoading = false);
+                if (mounted) setState(() {});
+              }
+            }
+
+            return AnimatedSwitcher(
+              duration: const Duration(milliseconds: 250),
+              transitionBuilder: (child, anim) =>
+                  ScaleTransition(scale: anim, child: child),
+              child: InkWell(
+                key: ValueKey(isFollowing),
+                borderRadius: BorderRadius.circular(55),
+                onTap: (isInitialLoading || isLoading)
+                    ? null
+                    : handleFollowAction,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.easeInOut,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isFollowing
+                          ? Colors.white.withOpacity(0.7)
+                          : Colors.transparent,
+                      width: 1.2,
+                    ),
+                    gradient: isFollowing
+                        ? null
+                        : const LinearGradient(
+                            colors: [
+                              Color(0xFFFF0069), // Instagram pink/red
+                              Color(0xFFFFF600), // Instagram yellow
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
                           ),
+                    color: isFollowing ? Colors.white.withOpacity(0.12) : null,
+                    boxShadow: [
+                      if (!isFollowing)
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.3),
+                          offset: const Offset(0, 2),
+                          blurRadius: 4,
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Users you follow will appear here',
+                    ],
+                  ),
+                  child: isInitialLoading || isLoading
+                      ? const SizedBox(
+                          width: 12,
+                          height: 12,
+                          // child: CircularProgressIndicator(
+                          //   strokeWidth: 2,
+                          //   valueColor: AlwaysStoppedAnimation<Color>(
+                          //     Colors.white,
+                          //   ),
+                          // ),
+                        )
+                      : Text(
+                          isFollowing ? 'Following' : 'Follow',
                           style: TextStyle(
-                            color: Theme.of(
-                              context,
-                            ).textTheme.bodyLarge?.color?.withOpacity(0.5),
+                            color: isFollowing ? Colors.white : Colors.black,
+                            fontWeight: FontWeight.bold,
                             fontSize: 14,
                           ),
                         ),
-                      ],
-                    ),
-                  );
-                }
-
-                return ListView.builder(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  itemCount: snapshot.data!.docs.length,
-                  itemBuilder: (context, index) {
-                    final followerDoc = snapshot.data!.docs[index];
-                    return FutureBuilder<DocumentSnapshot>(
-                      future: _firestore
-                          .collection('users')
-                          .doc(followerDoc.id)
-                          .get(),
-                      builder: (context, userSnapshot) {
-                        if (!userSnapshot.hasData) {
-                          return _buildUserItemShimmer(context);
-                        }
-
-                        if (!userSnapshot.data!.exists) {
-                          return ListTile(
-                            title: Text(
-                              'User not found',
-                              style: TextStyle(
-                                color: Theme.of(
-                                  context,
-                                ).textTheme.bodyLarge?.color?.withOpacity(0.5),
-                              ),
-                            ),
-                          );
-                        }
-
-                        final user = AppUser.fromSnap(userSnapshot.data!);
-                        final isCurrentUser =
-                            _auth.currentUser?.uid == widget.userId;
-                        final isLoading =
-                            _unfollowLoadingStates[user.uid] ?? false;
-
-                        return _buildUserItem(
-                          user,
-                          isCurrentUser,
-                          isLoading,
-                          context,
-                        );
-                      },
-                    );
-                  },
-                );
-              },
-            ),
-    );
-  }
-
-  Widget _buildUserItemShimmer(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Theme.of(context).brightness == Brightness.dark
-            ? Colors.grey[900]
-            : Colors.grey[100],
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 50,
-            height: 50,
-            decoration: BoxDecoration(
-              color: Theme.of(context).brightness == Brightness.dark
-                  ? Colors.grey[800]
-                  : Colors.grey[300],
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 120,
-                  height: 16,
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? Colors.grey[800]
-                      : Colors.grey[300],
                 ),
-                const SizedBox(height: 8),
-                Container(
-                  width: 80,
-                  height: 12,
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? Colors.grey[800]
-                      : Colors.grey[300],
-                ),
-              ],
-            ),
-          ),
-          Container(
-            width: 80,
-            height: 32,
-            decoration: BoxDecoration(
-              color: Theme.of(context).brightness == Brightness.dark
-                  ? Colors.grey[800]
-                  : Colors.grey[300],
-              borderRadius: BorderRadius.circular(16),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildUserItem(
-    AppUser user,
-    bool isCurrentUser,
-    bool isLoading,
-    BuildContext context,
-  ) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: Theme.of(context).brightness == Brightness.dark
-            ? Colors.grey[900]
-            : Colors.grey[100],
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) =>
-                    ProfileScreen(userId: "${user.uid}", isCurrentUser: false),
               ),
             );
           },
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                // Profile Avatar
-                Hero(
-                  tag: 'profile_${user.uid}',
-                  child: CircleAvatar(
-                    radius: 25,
-                    backgroundImage: CachedNetworkImageProvider(
-                      "${user.image}",
-                    ),
-                    backgroundColor:
-                        Theme.of(context).brightness == Brightness.dark
-                        ? Colors.grey[800]
-                        : Colors.grey[300],
-                  ),
-                ),
-                const SizedBox(width: 16),
+        );
+      },
+    );
+  }
 
-                // User Info
-                Expanded(
+  Widget _buildVideoOverlay(VideoItem item, Size size) {
+    final video = item.video;
+    final isLiked = video.safeLikesList.contains(authUserId);
+
+    return Column(
+      children: [
+        Expanded(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.only(left: 10, bottom: 10),
                   child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        "${user.name}",
-                        style: TextStyle(
-                          color: Theme.of(context).textTheme.bodyLarge?.color,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 4),
-                      FutureBuilder<int>(
-                        future: _followService.getFollowersCount("${user.uid}"),
-                        builder: (context, snapshot) {
-                          final followers = snapshot.data ?? 0;
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          // 👤 Profile picture
+                          _buildProfile(video.userId!, video.userName ?? ''),
+                          const SizedBox(width: 5),
 
-                          String formatCount(int count) {
-                            if (count < 1000) return count.toString();
-                            if (count < 1000000) {
-                              return '${(count / 1000).toStringAsFixed(1)}K';
-                            }
-                            return '${(count / 1000000).toStringAsFixed(1)}M';
-                          }
+                          // 👇 Username expands flexibly but doesn't push the button off-screen
+                          Flexible(
+                            flex: 3,
+                            child: GestureDetector(
+                              onTap: () {
+                                if (!_isVideoPaused) {
+                                  setState(() => _isVideoPaused = true);
+                                }
+                                Get.to(
+                                  () => ProfileScreen(
+                                    userId: video.userId!,
+                                    isCurrentUser: false,
+                                  ),
+                                )?.then((_) {
+                                  if (mounted) {
+                                    setState(() => _isVideoPaused = false);
+                                  }
+                                });
+                              },
+                              child:
+                                  StreamBuilder<
+                                    DocumentSnapshot<Map<String, dynamic>>
+                                  >(
+                                    stream: FirebaseFirestore.instance
+                                        .collection('users')
+                                        .doc(video.userId)
+                                        .snapshots(),
+                                    builder: (context, snapshot) {
+                                      if (!snapshot.hasData ||
+                                          snapshot.data == null ||
+                                          !snapshot.data!.exists) {
+                                        return const Text(
+                                          '@UnknownUser',
+                                          style: TextStyle(
+                                            fontSize: 15,
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                          maxLines: 1,
+                                        );
+                                      }
 
-                          return Text(
-                            '${formatCount(followers)} followers',
-                            style: TextStyle(
-                              color: Theme.of(
-                                context,
-                              ).textTheme.bodyLarge?.color?.withOpacity(0.6),
-                              fontSize: 14,
+                                      final userData = snapshot.data!.data()!;
+                                      final userName =
+                                          userData['name'] ?? 'Unknown User';
+
+                                      return Text(
+                                        '@$userName',
+                                        style: const TextStyle(
+                                          fontSize: 15,
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                        maxLines: 1,
+                                        softWrap: false,
+                                      );
+                                    },
+                                  ),
                             ),
-                          );
-                        },
+                          ),
+
+                          const SizedBox(width: 15),
+
+                          // 👇 Follow button adjusts flexibly and shrinks if space is tight
+                          Flexible(
+                            flex: 0,
+                            fit: FlexFit.loose,
+                            child: Align(
+                              alignment: Alignment.centerRight,
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  minWidth: 50,
+                                  maxWidth:
+                                      100, // keeps it responsive on smaller screens
+                                ),
+                                child: _buildFollowButton(video.userId!),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 8),
+
+                      _ExpandableDescription(text: video.descriptionTags ?? ""),
+
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.music_note,
+                            size: 16,
+                            color: Colors.white,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              video.artistSongName ?? 'Original sound',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                color: Colors.white,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
                 ),
+              ),
 
-                // Unfollow Button (only shown if current user is viewing their own following)
-                if (isCurrentUser)
-                  isLoading
-                      ? Container(
-                          width: 32,
-                          height: 32,
-                          padding: const EdgeInsets.all(6),
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Theme.of(context).textTheme.bodyLarge?.color,
+              // 🎯 Right Action Buttons Column with Ionicons
+              Container(
+                width: 70,
+                margin: EdgeInsets.only(bottom: size.height / 15, right: 8),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    //const SizedBox(height: 20),
+                    _buildActionButton(
+                      icon: isLiked ? Ionicons.heart : Ionicons.heart_outline,
+                      count: _formatCount(video.likesList!.length),
+                      color: isLiked ? Colors.red : Colors.white,
+                      onTap: () {
+                        // Fast UI update
+                        setState(() {
+                          if (isLiked) {
+                            video.likesList!.remove(authUserId);
+                          } else {
+                            video.likesList!.add(authUserId);
+                          }
+                        });
+
+                        // Background update to Firestore
+                        videoController.likeVideo(
+                          video.videoId!,
+                          video.userId!,
+                          video.userName!,
+                          video.thumbnailUrl!,
+                        );
+                      },
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // Comment Button with Ionicons
+                    _buildActionButton(
+                      icon: Ionicons.chatbubble_ellipses_outline,
+                      count: _formatCount(video.totalComments!),
+                      color: Colors.white,
+                      onTap: () {
+                        if (video.userId == null) {
+                          Get.snackbar('Error', 'Missing data for comments');
+                          return;
+                        }
+
+                        if (!_isVideoPaused) {
+                          setState(() => _isVideoPaused = true);
+                        }
+
+                        Get.to(
+                          () => CommentsScreen(
+                            videoId: "${video.videoId}",
+                            videoOwnerId: "${video.userId}",
                           ),
-                        )
-                      : IconButton(
+                        )?.then((_) {
+                          if (mounted) {
+                            setState(() => _isVideoPaused = false);
+                          }
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Share Button with Ionicons
+                    _buildActionButton(
+                      icon: Ionicons.paper_plane_outline,
+                      count: _formatCount(video.totalShares!),
+                      color: Colors.white,
+                      onTap: () => _shareVideo(
+                        video.videoUrl!,
+                        video.descriptionTags ?? '',
+                        video.videoId!,
+                        video.userId!,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Views Counter with Ionicons
+                    _buildActionButton(
+                      icon: Ionicons.eye_outline,
+                      count: _formatCount(video.views ?? 0),
+                      color: Colors.white,
+                      onTap: () {},
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    StreamBuilder<bool>(
+                      stream: SavedVideoService().isVideoSaved(video.videoId!),
+                      builder: (context, snapshot) {
+                        final isSaved = snapshot.data ?? false;
+
+                        return IconButton(
                           icon: Icon(
-                            Icons.person_remove,
-                            color: Theme.of(
-                              context,
-                            ).textTheme.bodyLarge?.color?.withOpacity(0.6),
+                            isSaved ? Icons.bookmark : Icons.bookmark_border,
+                            color: isSaved
+                                ? const Color.fromARGB(255, 255, 255, 255)
+                                : Colors.white,
+                            size: 28,
                           ),
-                          onPressed: () {
-                            _confirmUnfollow("${user.uid}", "${user.name}");
+                          onPressed: () async {
+                            final service = SavedVideoService();
+                            if (isSaved) {
+                              // 👇 remove (unsave)
+                              await service.unsaveVideo(video.videoId!);
+                            } else {
+                              // 👇 add (save)
+                              await service.saveVideo(video.videoId!);
+                            }
                           },
+                        );
+                      },
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    CircleAnimationProfile(
+                      child: Container(
+                        width: 45,
+                        height: 45,
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Colors.purple, Colors.pink],
+                          ),
+                          borderRadius: BorderRadius.circular(22.5),
                         ),
-              ],
-            ),
+                        child: const Icon(
+                          Icons.music_note,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+
+    if (_isLoading) {
+      return const Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(child: CircularProgressIndicator(color: Colors.white)),
+      );
+    }
+
+    if (followingVideos.isEmpty) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.video_library_outlined,
+                color: Colors.white54,
+                size: 60,
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'No Videos from Following',
+                style: TextStyle(color: Colors.white54, fontSize: 16),
+              ),
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 40),
+                child: Text(
+                  'Videos from people you follow will appear here',
+                  style: TextStyle(color: Colors.white38, fontSize: 14),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          PageView.builder(
+            controller: _pageController,
+            itemCount: followingVideos.length,
+            scrollDirection: Axis.vertical,
+            physics: const CustomScrollPhysics(),
+            onPageChanged: _onPageChanged,
+            itemBuilder: (context, index) {
+              final item = followingVideos[index];
+              final isCurrent = index == _currentPage;
+
+              return Stack(
+                fit: StackFit.expand,
+                children: [
+                  // 🎥 Video layer handles only tap & double-tap
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _togglePlayPause,
+                    onDoubleTap: () {
+                      if (followingVideos.isEmpty || _isDisposed) return;
+
+                      final video = item.video;
+                      final alreadyLiked = video.safeLikesList.contains(
+                        authUserId,
+                      );
+
+                      _showLikeAnimation();
+
+                      setState(() {
+                        if (!alreadyLiked) {
+                          video.safeLikesList.add(authUserId);
+                        }
+                      });
+
+                      if (!alreadyLiked) {
+                        unawaited(
+                          videoController.likeVideo(
+                            video.videoId!,
+                            video.userId!,
+                            video.userName!,
+                            video.thumbnailUrl!,
+                          ),
+                        );
+                      }
+                    },
+                    child: VideoPalyerItem(
+                      videoUrl: item.video.videoUrl!,
+                      isPlaying: isCurrent && !_isVideoPaused,
+                      onControllerReady: (_) {},
+                      onControllerDispose: (_) {},
+                    ),
+                  ),
+
+                  // 🧩 Overlay with profile, follow, like, etc.
+                  IgnorePointer(
+                    ignoring:
+                        false, // important: allows taps on overlay buttons
+                    child: _buildVideoOverlay(item, size),
+                  ),
+                ],
+              );
+            },
+          ),
+        ],
       ),
     );
   }
+}
+
+class _ExpandableDescription extends StatefulWidget {
+  final String text;
+  const _ExpandableDescription({required this.text});
+
+  @override
+  State<_ExpandableDescription> createState() => _ExpandableDescriptionState();
+}
+
+class _ExpandableDescriptionState extends State<_ExpandableDescription> {
+  bool _isExpanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final textSpan = TextSpan(
+          text: widget.text,
+          style: const TextStyle(
+            fontSize: 14,
+            color: Colors.white,
+            height: 1.3,
+          ),
+        );
+
+        final textPainter = TextPainter(
+          text: textSpan,
+          maxLines: 2,
+          textDirection: TextDirection.ltr,
+        )..layout(maxWidth: constraints.maxWidth);
+
+        final needsExpansion = textPainter.didExceedMaxLines;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AnimatedSize(
+              duration: const Duration(milliseconds: 200),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: constraints.maxWidth),
+                child: Text(
+                  widget.text,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: Colors.white,
+                    height: 1.3,
+                  ),
+                  maxLines: _isExpanded ? null : 2,
+                  overflow: _isExpanded
+                      ? TextOverflow.visible
+                      : TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+            if (needsExpansion)
+              GestureDetector(
+                onTap: () => setState(() => _isExpanded = !_isExpanded),
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    _isExpanded ? 'Show less' : 'Show more',
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class VideoItem {
+  final Video video;
+  final AppUser user;
+  VideoItem({required this.video, required this.user});
 }

@@ -153,13 +153,13 @@ class NotificationController extends GetxController {
         'read': true,
       });
     } catch (e) {
-      print("Error marking notification as read: $e");
+      debugPrint("Error marking notification as read: $e");
     }
   }
 
   Future<void> markAllAsRead() async {
     try {
-      String currentUserId = authController.user!.uid;
+      String currentUserId = authController.user.uid;
 
       final querySnapshot = await _firestore
           .collection('notifications')
@@ -175,7 +175,7 @@ class NotificationController extends GetxController {
 
       await batch.commit();
     } catch (e) {
-      print("Error marking all notifications as read: $e");
+      debugPrint("Error marking all notifications as read: $e");
     }
   }
 

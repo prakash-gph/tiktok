@@ -1,60 +1,70 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:get/get.dart';
+import 'package:ionicons/ionicons.dart';
 import 'package:tiktok/authentication/authentication_controller.dart';
 import 'package:tiktok/comments/comments_screen.dart';
+import 'package:tiktok/follow_service/follow_service.dart';
 import 'package:tiktok/for_you/custom_scroll_physics.dart';
-import 'package:tiktok/for_you/following_screen.dart';
 import 'package:tiktok/for_you/like_animation.dart';
-import 'package:tiktok/notification/notification_screen.dart';
+import 'package:tiktok/for_you/save_videos/saved_video_controller.dart';
+import 'package:tiktok/for_you/save_videos/saved_video_model.dart';
 import 'package:tiktok/profile/profile_screen.dart';
 import 'package:tiktok/share_vieos/share_videos.models.dart';
 import 'package:tiktok/upload_videos/get_video_url_controller.dart';
-import 'package:tiktok/upload_videos/video.dart';
 import 'package:tiktok/upload_videos/video_palyer_item.dart';
 import 'package:tiktok/widgets/circle_animation_profile.dart';
 import 'package:share_plus/share_plus.dart';
 import 'dart:math';
+import 'package:video_player/video_player.dart';
 
 class ForYouVideoScreen extends StatefulWidget {
-  const ForYouVideoScreen({
-    super.key,
-    // required final List<Video> videos,
-    // required int initialIndex,
-  });
+  final VoidCallback? onProfileTab;
+  const ForYouVideoScreen({super.key, this.onProfileTab});
 
   @override
-  State<ForYouVideoScreen> createState() => _VideoScreenState();
+  State<ForYouVideoScreen> createState() => VideoScreenState();
 }
 
-class _VideoScreenState extends State<ForYouVideoScreen>
+class VideoScreenState extends State<ForYouVideoScreen>
     with SingleTickerProviderStateMixin {
+  final List<VideoPlayerController> _videoControllers = [];
+
+  void pauseAllVideos() {
+    for (var c in _videoControllers) {
+      if (c.value.isPlaying) c.pause();
+    }
+  }
+
+  void resumeVideos() {
+    for (var c in _videoControllers) {
+      if (!c.value.isPlaying) c.play();
+    }
+  }
+
   final GetVideoUrlController videoController = Get.put(
     GetVideoUrlController(),
   );
-
   final PageController _pageController = PageController(
     viewportFraction: 1.0,
     keepPage: true,
   );
-  int _currentPage = 0;
 
+  int _currentPage = 0;
+  bool _isVideoPaused = false;
   bool _isLongPressing = false;
   late AnimationController _animationController;
   OverlayEntry? _likeAnimationOverlay;
   final Random _random = Random();
   final List<int> _displayedVideoIndices = [];
   bool _isInitialLoad = true;
-
   final String authUserId = AuthenticationController.instanceAuth.user.uid;
-
-  // Cache for notification count to avoid repeated queries
-  int _cachedUnreadCount = 0;
+  final FollowService _followService = FollowService();
+  // Cache for notification count
   StreamSubscription<QuerySnapshot>? _notificationSubscription;
-
+  final Set<String> _viewedVideos = {};
+  bool _isDisposed = false;
   @override
   void initState() {
     super.initState();
@@ -62,53 +72,23 @@ class _VideoScreenState extends State<ForYouVideoScreen>
       vsync: this,
       duration: const Duration(milliseconds: 500),
     );
-
-    // Setup notification listener
-    _setupNotificationListener();
-  }
-
-  void _setupNotificationListener() {
-    _notificationSubscription = FirebaseFirestore.instance
-        .collection('notifications')
-        .where('userId', isEqualTo: authUserId)
-        .where('read', isEqualTo: false)
-        .snapshots()
-        .listen(
-          (snapshot) {
-            if (mounted) {
-              setState(() {
-                _cachedUnreadCount = snapshot.docs.length;
-              });
-            }
-          },
-          onError: (error) {
-            // Handle error if needed
-            debugPrint('Notification stream error: $error');
-          },
-        );
   }
 
   void _loadInitialVideos() {
     if (videoController.videoList.isNotEmpty) {
-      // Start with 3 random videos
       _loadMoreVideos(count: min(3, videoController.videoList.length));
     }
   }
 
-  final Set<String> _viewedVideos = {};
-
   Future<void> _incrementVideoViews(String videoId) async {
-    if (_viewedVideos.contains(videoId)) return; // Already counted
+    if (_viewedVideos.contains(videoId)) return;
 
     try {
       final videoRef = FirebaseFirestore.instance
           .collection('videos')
           .doc(videoId);
-
-      // Atomically increment the views field
       await videoRef.update({'views': FieldValue.increment(1)});
-
-      _viewedVideos.add(videoId); // Mark as counted
+      _viewedVideos.add(videoId);
     } catch (e) {
       debugPrint('Failed to increment views for $videoId: $e');
     }
@@ -121,49 +101,31 @@ class _VideoScreenState extends State<ForYouVideoScreen>
       videoController.videoList.length,
       (index) => index,
     );
-
-    // Remove already displayed indices
     availableIndices.removeWhere(
       (index) => _displayedVideoIndices.contains(index),
     );
 
-    // If not enough videos, recycle some
     if (availableIndices.length < count) {
-      // Reset and shuffle all indices
       _displayedVideoIndices.clear();
       availableIndices.addAll(
         List.generate(videoController.videoList.length, (index) => index),
       );
       availableIndices.shuffle(_random);
     } else {
-      // Shuffle available indices
       availableIndices.shuffle(_random);
     }
 
-    // Add new indices to displayed list
     final newIndices = availableIndices.take(count).toList();
     _displayedVideoIndices.addAll(newIndices);
 
-    // Update the UI
-    if (mounted) {
-      setState(() {});
-    }
+    if (mounted) setState(() {});
   }
 
-  // void _onPageChanged(int page) {
-  //   setState(() {
-  //     _currentPage = page;
-  //   });
-
-  //   // Load more videos when we're 2 away from the end
-  //   if (page >= _displayedVideoIndices.length - 2) {
-  //     _loadMoreVideos(count: 3);
-  //   }
-  // }
-
   void _onPageChanged(int page) {
+    if (_isDisposed) return;
     setState(() {
       _currentPage = page;
+      _isVideoPaused = false; // Auto-play when changing videos
     });
 
     if (_displayedVideoIndices.isEmpty) return;
@@ -171,14 +133,18 @@ class _VideoScreenState extends State<ForYouVideoScreen>
     final videoIndex = _displayedVideoIndices[page];
     final data = videoController.videoList[videoIndex];
 
-    // Increment view count for the current video
     if (data.videoId != null) {
       _incrementVideoViews(data.videoId!);
     }
 
-    // Load more videos when we're 2 away from the end
     if (page >= _displayedVideoIndices.length - 2) {
       _loadMoreVideos(count: 3);
+    }
+  }
+
+  void _togglePlayPause() {
+    if (!_isDisposed) {
+      setState(() => _isVideoPaused = !_isVideoPaused);
     }
   }
 
@@ -186,6 +152,7 @@ class _VideoScreenState extends State<ForYouVideoScreen>
   void dispose() {
     _pageController.dispose();
     _animationController.dispose();
+    _isDisposed = true;
     _removeLikeAnimation();
     _notificationSubscription?.cancel();
     super.dispose();
@@ -243,12 +210,25 @@ class _VideoScreenState extends State<ForYouVideoScreen>
 
         return GestureDetector(
           onTap: () {
-            // Navigate to profile screen
-            Get.to(() => ProfileScreen(userId: userId));
+            if (!_isVideoPaused) {
+              setState(() => _isVideoPaused = true);
+            }
+            if (userId == authUserId) {
+              widget.onProfileTab?.call();
+            } else {
+              Get.to(
+                () => ProfileScreen(userId: userId, isCurrentUser: false),
+              )?.then((_) {
+                if (mounted) {
+                  setState(() => _isVideoPaused = false);
+                }
+              });
+            }
           },
+
           child: Container(
-            width: 50,
-            height: 50,
+            width: 33,
+            height: 33,
             decoration: BoxDecoration(
               border: Border.all(color: Colors.white, width: 2),
               shape: BoxShape.circle,
@@ -299,276 +279,283 @@ class _VideoScreenState extends State<ForYouVideoScreen>
     );
   }
 
-  Widget _buildActionButton(
-    IconData icon,
-    String count,
-    Color color,
-    VoidCallback onTap,
-  ) {
-    return Column(
-      children: [
-        IconButton(icon: Icon(icon, size: 45), color: color, onPressed: onTap),
-        Text(
-          count,
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-            color: Colors.white,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTab(String text, bool isSelected, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(
-              color: isSelected ? Colors.white : Colors.transparent,
-              width: 3,
-            ),
-          ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          child: Text(
-            text,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Colors.white.withOpacity(isSelected ? 1 : 0.7),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showShareSheet(
-    BuildContext context,
-    String authUserId,
-    String videoUrl,
-    String description,
-    String videoId,
-  ) {
-    final currentIndex = _displayedVideoIndices[_currentPage];
-    final data = videoController.videoList[currentIndex];
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.black87,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(16),
-        height: 220,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Share to',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-
-                children: [
-                  _buildShareOption(Icons.chat, 'Messages', () {
-                    Navigator.pop(context);
-                    Share.share(
-                      'Check this out: $videoUrl',
-                      subject: description,
-                    );
-                    shareVideoAndTrack(videoId, "${data.userId}");
-                  }),
-                  _buildShareOption(Icons.email, 'Email', () {
-                    Navigator.pop(context);
-                    Share.share(
-                      'Check this out: $videoUrl',
-                      subject: description,
-                    );
-                    shareVideoAndTrack(videoId, "${data.userId}");
-                  }),
-                  _buildShareOption(Icons.facebook, 'Facebook', () {
-                    Navigator.pop(context);
-                    Share.share(
-                      'Check this out: $videoUrl',
-                      subject: description,
-                    );
-                    shareVideoAndTrack(videoId, "${data.userId}");
-                  }),
-                  _buildShareOption(Icons.link, 'Copy Link', () {
-                    Navigator.pop(context);
-                    Clipboard.setData(ClipboardData(text: videoUrl));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Link copied to clipboard')),
-                    );
-                    shareVideoAndTrack(videoId, "${data.userId}");
-                  }),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildShareOption(IconData icon, String label, VoidCallback onTap) {
+  // 🎯 TikTok-style Action Buttons with Ionicons
+  Widget _buildActionButton({
+    required IconData icon,
+    required String count,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
     return GestureDetector(
       onTap: onTap,
       child: Column(
         children: [
-          CircleAvatar(
-            backgroundColor: Colors.grey[800],
-            radius: 28,
-            child: Icon(icon, color: Colors.white, size: 26),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.3),
+              borderRadius: BorderRadius.circular(25),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.4),
+                  blurRadius: 5,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            padding: const EdgeInsets.all(8),
+            child: Icon(icon, size: 28, color: color),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           Text(
-            label,
-            style: const TextStyle(color: Colors.white, fontSize: 12),
+            count,
+            style: const TextStyle(
+              fontSize: 12,
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ],
       ),
     );
   }
 
-  // Create a widget for the notification icon with badge
-  Widget _buildNotificationIcon() {
-    return Stack(
-      children: [
-        IconButton(
-          icon: const Icon(Icons.notifications, color: Colors.white),
-          onPressed: () => Get.to(
-            () => NotificationsScreen(
-              userId: FirebaseAuth.instance.currentUser!.uid,
-            ),
-          ),
-        ),
-        if (_cachedUnreadCount > 0)
-          Positioned(
-            right: 8,
-            top: 8,
-            child: Container(
-              padding: const EdgeInsets.all(2),
-              decoration: BoxDecoration(
-                color: Colors.red,
-                borderRadius: BorderRadius.circular(10),
+  void _shareVideo(
+    String videoUrl,
+    String description,
+    String videoId,
+    String ownerId,
+  ) async {
+    try {
+      await Share.share(
+        'Check out this video: $videoUrl\n$description',
+        subject: 'TikTok Video',
+      );
+      shareVideoAndTrack(videoId, ownerId);
+    } catch (e) {
+      debugPrint('Share error: $e');
+    }
+  }
+
+  // 🎯 Top Bar with Center Tabs and Right Notification
+
+  Widget _buildFollowButton(String userId) {
+    // Hide the button if it's the current user's own profile
+    if (userId == authUserId) return const SizedBox.shrink();
+
+    return FutureBuilder<bool>(
+      future: _followService.isFollowing(userId),
+      builder: (context, snapshot) {
+        final bool isFollowing = snapshot.data ?? false;
+        final bool isInitialLoading =
+            snapshot.connectionState == ConnectionState.waiting;
+
+        return StatefulBuilder(
+          builder: (context, setInnerState) {
+            bool isLoading = false;
+
+            Future<void> handleFollowAction() async {
+              setInnerState(() => isLoading = true);
+              try {
+                if (isFollowing) {
+                  await _followService.unfollowUser(userId);
+                } else {
+                  await _followService.followUser(userId);
+                }
+              } finally {
+                setInnerState(() => isLoading = false);
+                if (mounted) setState(() {});
+              }
+            }
+
+            return AnimatedSwitcher(
+              duration: const Duration(milliseconds: 250),
+              transitionBuilder: (child, anim) =>
+                  ScaleTransition(scale: anim, child: child),
+              child: InkWell(
+                key: ValueKey(isFollowing),
+                borderRadius: BorderRadius.circular(55),
+                onTap: (isInitialLoading || isLoading)
+                    ? null
+                    : handleFollowAction,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.easeInOut,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isFollowing
+                          ? Colors.white.withOpacity(0.7)
+                          : Colors.transparent,
+                      width: 1.2,
+                    ),
+                    gradient: isFollowing
+                        ? null
+                        : const LinearGradient(
+                            colors: [
+                              Color(0xFFFF0069), // Instagram pink/red
+                              Color(0xFFFFF600), // Instagram yellow
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                    color: isFollowing ? Colors.white.withOpacity(0.12) : null,
+                    boxShadow: [
+                      if (!isFollowing)
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.3),
+                          offset: const Offset(0, 2),
+                          blurRadius: 4,
+                        ),
+                    ],
+                  ),
+                  child: isInitialLoading || isLoading
+                      ? const SizedBox(
+                          width: 12,
+                          height: 12,
+                          // child: CircularProgressIndicator(
+                          //   strokeWidth: 2,
+                          //   valueColor: AlwaysStoppedAnimation<Color>(
+                          //     Colors.white,
+                          //   ),
+                          // ),
+                        )
+                      : Text(
+                          isFollowing ? 'Following' : 'Follow',
+                          style: TextStyle(
+                            color: isFollowing ? Colors.white : Colors.black,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                ),
               ),
-              constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-              child: Text(
-                _cachedUnreadCount > 99 ? '99+' : _cachedUnreadCount.toString(),
-                style: const TextStyle(color: Colors.white, fontSize: 10),
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ),
-      ],
+            );
+          },
+        );
+      },
     );
   }
 
   Widget _buildVideoOverlay(data, Size size, int index) {
+    final isLiked = data.likesList!.contains(authUserId);
+
     return Column(
       children: [
-        // Top Tab Bar
-        Container(
-          padding: const EdgeInsets.only(top: 48, right: 50, left: 100),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _buildTab(
-                'For You',
-                true, // Always highlight since this is the ForYou screen
-                () {}, // No action needed
-              ),
-              _buildTab(
-                'Following',
-                false, // Not selected
-                () {
-                  Get.to(
-                    () => FollowingScreen(
-                      userId: FirebaseAuth.instance.currentUser!.uid,
-                    ),
-                  );
-                },
-              ),
-              const Spacer(),
-              _buildNotificationIcon(),
-              const SizedBox(width: 8),
-            ],
-          ),
-        ),
         Expanded(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Expanded(
                 child: Container(
-                  padding: const EdgeInsets.only(left: 16, bottom: 20),
+                  padding: const EdgeInsets.only(left: 10, bottom: 10),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
+
                     children: [
-                      StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                        stream: FirebaseFirestore.instance
-                            .collection('users')
-                            .doc(data.userId)
-                            .snapshots(),
-                        // Safe dummy stream
-                        builder: (context, snapshot) {
-                          if (!snapshot.hasData ||
-                              snapshot.data == null ||
-                              !snapshot.data!.exists) {
-                            return const Text(
-                              'Unknown User',
-                              style: TextStyle(
-                                fontSize: 16,
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            );
-                          }
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          //  Profile picture
+                          _buildProfile(data.userId!, index),
+                          const SizedBox(width: 5),
 
-                          final userData = snapshot.data!.data()!;
-                          final userName = userData['name'] ?? 'Unknown User';
+                          //  Username expands flexibly but doesn't push the button off-screen
+                          Flexible(
+                            flex: 3,
+                            child: GestureDetector(
+                              onTap: () {
+                                if (!_isVideoPaused) {
+                                  setState(() => _isVideoPaused = true);
+                                }
+                                if (data.userId == authUserId) {
+                                  widget.onProfileTab?.call();
+                                } else {
+                                  Get.to(
+                                    () => ProfileScreen(
+                                      userId: data.userId,
+                                      isCurrentUser: false,
+                                    ),
+                                  )?.then((_) {
+                                    if (mounted) {
+                                      setState(() => _isVideoPaused = false);
+                                    }
+                                  });
+                                }
+                              },
+                              child:
+                                  StreamBuilder<
+                                    DocumentSnapshot<Map<String, dynamic>>
+                                  >(
+                                    stream: FirebaseFirestore.instance
+                                        .collection('users')
+                                        .doc(data.userId)
+                                        .snapshots(),
+                                    builder: (context, snapshot) {
+                                      if (!snapshot.hasData ||
+                                          snapshot.data == null ||
+                                          !snapshot.data!.exists) {
+                                        return const Text(
+                                          '@UnknownUser',
+                                          style: TextStyle(
+                                            fontSize: 15,
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                          maxLines: 1,
+                                        );
+                                      }
 
-                          return Text(
-                            userName,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
+                                      final userData = snapshot.data!.data()!;
+                                      final userName =
+                                          userData['name'] ?? 'Unknown User';
+
+                                      return Text(
+                                        '@$userName',
+                                        style: const TextStyle(
+                                          fontSize: 15,
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                        maxLines: 1,
+                                        softWrap: false,
+                                      );
+                                    },
+                                  ),
                             ),
-                          );
-                        },
+                          ),
+
+                          const SizedBox(width: 15),
+
+                          // 👇 Follow button adjusts flexibly and shrinks if space is tight
+                          Flexible(
+                            flex: 0,
+                            fit: FlexFit.loose,
+                            child: Align(
+                              alignment: Alignment.centerRight,
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  minWidth: 50,
+                                  maxWidth:
+                                      100, // keeps it responsive on smaller screens
+                                ),
+                                child: _buildFollowButton(data.userId!),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
 
-                      // Text(
-                      //   data.userName ?? 'Unknown User',
-                      //   style: const TextStyle(
-                      //     fontSize: 16,
-                      //     color: Colors.white,
-                      //     fontWeight: FontWeight.bold,
-                      //   ),
-                      // ),
                       const SizedBox(height: 8),
-                      Text(
-                        data.descriptionTags ?? 'No description',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: Colors.white,
-                        ),
-                      ),
+
+                      _ExpandableDescription(text: data.descriptionTags ?? ""),
+
                       const SizedBox(height: 8),
                       Row(
                         children: [
@@ -580,7 +567,7 @@ class _VideoScreenState extends State<ForYouVideoScreen>
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
-                              data.artistSongName ?? 'Unknown Song',
+                              data.artistSongName ?? 'Original sound',
                               style: const TextStyle(
                                 fontSize: 14,
                                 color: Colors.white,
@@ -595,21 +582,20 @@ class _VideoScreenState extends State<ForYouVideoScreen>
                   ),
                 ),
               ),
+
+              // 🎯 Right Action Buttons Column with Ionicons
               Container(
-                width: 80,
-                margin: EdgeInsets.only(bottom: size.height / 19),
+                width: 70,
+                margin: EdgeInsets.only(bottom: size.height / 15, right: 8),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    _buildProfile("${data.userId}", index),
-                    const SizedBox(height: 20),
+                    // Like Button with Ionicons
                     _buildActionButton(
-                      (Icons.favorite_rounded),
-                      _formatCount(data.likesList!.length),
-                      data.likesList!.contains(authUserId)
-                          ? Colors.red
-                          : Colors.white,
-                      () => videoController.likeVideo(
+                      icon: isLiked ? Ionicons.heart : Ionicons.heart_outline,
+                      count: _formatCount(data.likesList!.length),
+                      color: isLiked ? Colors.red : Colors.white,
+                      onTap: () => videoController.likeVideo(
                         data.videoId,
                         data.userId,
                         data.userName,
@@ -617,50 +603,96 @@ class _VideoScreenState extends State<ForYouVideoScreen>
                       ),
                     ),
                     const SizedBox(height: 16),
+
+                    // Comment Button with Ionicons
                     _buildActionButton(
-                      Icons.comment,
-                      _formatCount(data.totalComments!),
-                      Colors.white,
-                      () {
+                      icon: Ionicons.chatbubble_ellipses_outline,
+                      count: _formatCount(data.totalComments!),
+                      color: Colors.white,
+
+                      onTap: () {
                         if (data.userId == null) {
                           Get.snackbar('Error', 'Missing data for comments');
                           return;
                         }
+
+                        if (!_isVideoPaused) {
+                          setState(() => _isVideoPaused = true);
+                        }
+
                         Get.to(
                           () => CommentsScreen(
                             videoId: "${data.videoId}",
                             videoOwnerId: "${data.userId}",
                           ),
-                        );
+                        )?.then((_) {
+                          if (mounted) {
+                            setState(() => _isVideoPaused = false);
+                          }
+                        });
                       },
                     ),
                     const SizedBox(height: 16),
+
+                    // Share Button with Ionicons
                     _buildActionButton(
-                      Icons.reply,
-                      _formatCount(data.totalShares!),
-                      Colors.white,
-                      () => _showShareSheet(
-                        context,
-                        authUserId,
-                        "${data.videoUrl}",
-                        "${data.descriptionTags}",
-                        "${data.videoId}",
+                      icon: Ionicons.paper_plane_outline,
+                      count: _formatCount(data.totalShares!),
+                      color: Colors.white,
+                      onTap: () => _shareVideo(
+                        data.videoUrl!,
+                        data.descriptionTags ?? '',
+                        data.videoId!,
+                        data.userId!,
                       ),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 16),
+
+                    // Views Counter with Ionicons
+                    _buildActionButton(
+                      icon: Ionicons.eye_outline,
+                      count: _formatCount(data.views ?? 0),
+                      color: Colors.white,
+                      onTap: () {},
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    StreamBuilder<bool>(
+                      stream: SavedVideoService().isVideoSaved(data.videoId!),
+                      builder: (context, snapshot) {
+                        final isSaved = snapshot.data ?? false;
+
+                        return IconButton(
+                          icon: Icon(
+                            isSaved ? Icons.bookmark : Icons.bookmark_border,
+                            color: isSaved
+                                ? const Color.fromARGB(255, 255, 255, 255)
+                                : Colors.white,
+                            size: 28,
+                          ),
+                          onPressed: () async {
+                            final service = SavedVideoService();
+                            if (isSaved) {
+                              // 👇 remove (unsave)
+                              await service.unsaveVideo(data.videoId!);
+                            } else {
+                              // 👇 add (save)
+                              await service.saveVideo(data.videoId!);
+                            }
+                          },
+                        );
+                      },
+                    ),
+
+                    const SizedBox(height: 16),
+
                     CircleAnimationProfile(
                       key: Key('circle_animation_$index'),
                       child: _buildMusicAlbum(
                         "${Icon(Icons.music_note)}",
                         index,
                       ),
-                    ),
-
-                    _buildActionButton(
-                      Icons.remove_red_eye_outlined,
-                      _formatCount(data.views ?? 0),
-                      Colors.white,
-                      () {},
                     ),
                   ],
                 ),
@@ -675,14 +707,6 @@ class _VideoScreenState extends State<ForYouVideoScreen>
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
-
-    // if (_selectedTab == 1) {
-    //   return FollowingScreen(userId: FirebaseAuth.instance.currentUser!.uid);
-
-    //   // Get.to(
-    //   //   () => FollowingScreen(userId: FirebaseAuth.instance.currentUser!.uid),
-    //   // );
-    // }
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -705,13 +729,10 @@ class _VideoScreenState extends State<ForYouVideoScreen>
                 Text(
                   videoController.errorMessage,
                   style: const TextStyle(color: Colors.white, fontSize: 16),
-                  textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 16),
                 ElevatedButton(
-                  onPressed: () {
-                    videoController.isLoading; // Assuming this method exists
-                  },
+                  onPressed: () => videoController.isLoading,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white,
                     foregroundColor: Colors.black,
@@ -732,9 +753,7 @@ class _VideoScreenState extends State<ForYouVideoScreen>
           );
         }
 
-        // Automatically load videos when they become available
         if (_displayedVideoIndices.isEmpty && _isInitialLoad) {
-          // Use a post-frame callback to avoid setState during build
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
               setState(() {
@@ -752,6 +771,7 @@ class _VideoScreenState extends State<ForYouVideoScreen>
         }
 
         return GestureDetector(
+          onTap: _togglePlayPause, // Single tap to play/pause
           onDoubleTap: () {
             if (_displayedVideoIndices.isNotEmpty) {
               final currentIndex = _displayedVideoIndices[_currentPage];
@@ -808,20 +828,38 @@ class _VideoScreenState extends State<ForYouVideoScreen>
                     children: [
                       VideoPalyerItem(
                         videoUrl: "${data.videoUrl}",
-                        isPlaying: index == _currentPage && !_isLongPressing,
+                        isPlaying:
+                            index == _currentPage &&
+                            !_isLongPressing &&
+                            !_isVideoPaused,
                         key: Key('video_player_${data.videoId}_$index'),
+                        onControllerReady: (controller) {},
+                        onControllerDispose: (controller) {},
                       ),
-                      if (_isLongPressing)
-                        Container(
-                          color: Colors.black54,
-                          child: const Center(
-                            child: Icon(
-                              Icons.pause_circle_filled,
-                              color: Colors.white,
-                              size: 80,
-                            ),
-                          ),
-                        ),
+
+                      // Play/Pause overlay when video is paused
+                      // if (_isVideoPaused && index == _currentPage)
+                      //   Container(
+                      //     color: Colors.black54,
+                      //     child: const Center(
+                      //       child: Icon(
+                      //         Icons.play_arrow_rounded,
+                      //         color: Colors.white,
+                      //         size: 80,
+                      //       ),
+                      //     ),
+                      //   ),
+                      // if (_isLongPressing)
+                      //   Container(
+                      //     color: Colors.black54,
+                      //     child: const Center(
+                      //       child: Icon(
+                      //         Icons.pause_circle_filled,
+                      //         color: Colors.white,
+                      //         size: 80,
+                      //       ),
+                      //     ),
+                      //   ),
                       _buildVideoOverlay(data, size, index),
                     ],
                   );
@@ -831,6 +869,67 @@ class _VideoScreenState extends State<ForYouVideoScreen>
           ),
         );
       }),
+    );
+  }
+}
+
+class _ExpandableDescription extends StatefulWidget {
+  final String text;
+  const _ExpandableDescription({required this.text});
+  @override
+  State<_ExpandableDescription> createState() => _ExpandableDescriptionState();
+}
+
+class _ExpandableDescriptionState extends State<_ExpandableDescription> {
+  bool _isExpanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    const textStyle = TextStyle(fontSize: 14, color: Colors.white);
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final span = TextSpan(text: widget.text, style: textStyle);
+        final tp = TextPainter(
+          text: span,
+          maxLines: 3,
+          textDirection: TextDirection.ltr,
+        )..layout(maxWidth: constraints.maxWidth);
+        final isOverflowing = tp.didExceedMaxLines;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AnimatedSize(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeInOut,
+              child: Text(
+                widget.text,
+                style: textStyle,
+                maxLines: _isExpanded ? null : 3,
+                overflow: _isExpanded
+                    ? TextOverflow.visible
+                    : TextOverflow.ellipsis,
+                softWrap: true,
+              ),
+            ),
+            if (isOverflowing)
+              GestureDetector(
+                onTap: () => setState(() => _isExpanded = !_isExpanded),
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    _isExpanded ? 'Show less' : 'More',
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }

@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
 import 'package:tiktok/authentication/authentication_controller.dart';
 import 'package:tiktok/authentication/user.dart';
 import 'package:tiktok/comments/comments_modle.dart';
@@ -102,7 +103,7 @@ class FirestoreService {
         // .orderBy('timestamp', descending: true)
         .snapshots()
         .map((snapshot) {
-          print("Replies fetched: ${snapshot.size}");
+          debugPrint("Replies fetched: ${snapshot.size}");
           return snapshot.docs
               .map((doc) => Comment.fromSnap(doc.data(), doc.id))
               .toList();

@@ -4,33 +4,34 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get/get.dart';
-import 'package:get/get_core/src/get_main.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:tiktok/authentication/login_screen.dart';
 import 'package:tiktok/authentication/user.dart';
 import 'package:tiktok/follow_service/follow_service.dart';
-import 'package:tiktok/for_you/for_you_video_screen.dart';
+import 'package:tiktok/for_you/save_videos/saved_video_grid.dart';
 import 'package:tiktok/profile/edit_profile_screen.dart';
 import 'package:tiktok/profile/follow_list_screen.dart';
-import 'package:tiktok/profile/profile_video_play_screen.dart';
+
 import 'package:tiktok/profile/profile_video_playscreen.dart';
 import 'package:tiktok/profile/profile_videos_grid_items.dart';
 import 'package:tiktok/theme/theme.dart';
 import 'package:tiktok/upload_videos/video.dart';
+import 'package:tiktok/videos_upload/screens/camera_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String userId;
   final bool isCurrentUser;
 
   const ProfileScreen({
-    Key? key,
+    super.key,
     required this.userId,
     this.isCurrentUser = false,
-  }) : super(key: key);
+  });
 
   @override
+  // ignore: library_private_types_in_public_api
   _ProfileScreenState createState() => _ProfileScreenState();
 }
 
@@ -48,10 +49,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isFollowing = false;
   final List<String> _profileTabs = ['Videos', 'Saved'];
   final bool _isFollowLoading = false;
-
+  // late final List<String> _profileTabs;
   @override
   void initState() {
     super.initState();
+    // _profileTabs = widget.isCurrentUser ? ['Videos', 'Saved'] : ['Videos'];
     _loadUserData();
     _checkIfFollowing();
   }
@@ -59,7 +61,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void _shareProfile() {
     if (_user == null) return;
 
-    final profileUrl = "https://mytiktokclone.com/user/${widget.userId}";
+    final profileUrl = "https://tiktok.com/user/${widget.userId}";
     final userName = _user!.name ?? 'User';
 
     Share.share(
@@ -267,7 +269,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ),
         content: Text(
-          'TikTok Clone v1.0.0\n\nA Flutter-based short video sharing application inspired by TikTok. Create, share, and discover amazing content!',
+          'TikTok v1.7.20\n\nA Flutter-based short video sharing application inspired by TikTok. Create, share, and discover amazing content!',
           style: TextStyle(
             color: Theme.of(
               context,
@@ -564,21 +566,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (thumbUrl.isNotEmpty) {
         await FirebaseStorage.instance.refFromURL(thumbUrl).delete();
       }
-
-      // if (!mounted) return;
-      // Navigator.of(context, rootNavigator: true).pop(); // Close loading
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Video deleted successfully"),
-          backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
     } catch (e) {
-      if (!mounted) return;
-      Navigator.of(context, rootNavigator: true).pop(); // Close loading
+      // if (!mounted) return;
+      // Navigator.of(context, rootNavigator: true).pop();
+
+      // Close loading
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -882,7 +874,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             gradient: const LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [Color(0xFF7E5555), Color(0xFF541010)],
+              // colors: [Color(0xFF7E5555), Color(0xFF541010)],
+              colors: [
+                Color.fromARGB(255, 161, 182, 219),
+                Color.fromARGB(255, 26, 152, 210),
+              ],
             ),
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
@@ -974,27 +970,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
-          // Expanded(
-          //   child: ElevatedButton(
-          //     onPressed: _toggleFollow,
-          //     style: ElevatedButton.styleFrom(
-          //       backgroundColor: _isFollowing
-          //           ? (Theme.of(context).brightness == Brightness.dark
-          //                 ? Colors.grey[800]
-          //                 : const Color.fromARGB(255, 163, 90, 90))
-          //           : Colors.red,
-          //       foregroundColor: Colors.white,
-          //       shape: RoundedRectangleBorder(
-          //         borderRadius: BorderRadius.circular(8),
-          //       ),
-          //       padding: const EdgeInsets.symmetric(vertical: 12),
-          //     ),
-          //     child: Text(
-          //       _isFollowing ? 'Unfollow' : 'Follow',
-          //       style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17),
-          //     ),
-          //   ),
-          // ),
           Expanded(
             child: ElevatedButton(
               onPressed: _isFollowLoading ? null : _toggleFollow,
@@ -1002,7 +977,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 backgroundColor: _isFollowing
                     ? (Theme.of(context).brightness == Brightness.dark
                           ? Colors.grey[800]
-                          : const Color.fromARGB(255, 163, 90, 90))
+                          : const Color.fromARGB(255, 97, 84, 84))
                     : Colors.red,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
@@ -1029,9 +1004,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                       )
                     : Text(
-                        _isFollowing ? 'Unfollow ↓' : 'Follow',
+                        _isFollowing ? 'Unfollow' : 'Follow',
                         key: ValueKey<String>(
-                          _isFollowing ? "Unfollow ↓" : "Follow",
+                          _isFollowing ? "Unfollow" : "Follow",
                         ),
                         style: const TextStyle(
                           fontWeight: FontWeight.w900,
@@ -1099,6 +1074,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   TextButton(
                     onPressed: () {
                       // Navigate to upload screen
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const CameraScreen(),
+                        ),
+                      );
                     },
                     child: const Text(
                       'Upload your first video',
@@ -1124,6 +1105,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             userProfileImage: _user!.image ?? '',
             descriptionTags: data['descriptionTags'],
             artistSongName: data['artistSongName'],
+            views: data['views'],
           );
         }).toList();
 
@@ -1170,29 +1152,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildSavedVideos() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.bookmark_border,
+    if (!widget.isCurrentUser) {
+      return Center(
+        child: Text(
+          "Saved videos are private",
+          style: TextStyle(
             color: Theme.of(
               context,
-            ).textTheme.bodyLarge?.color?.withOpacity(0.5),
-            size: 50,
+            ).textTheme.bodyLarge?.color?.withOpacity(0.6),
+            fontSize: 16,
           ),
-          const SizedBox(height: 16),
-          Text(
-            'Saved videos will appear here',
-            style: TextStyle(
-              color: Theme.of(
-                context,
-              ).textTheme.bodyLarge?.color?.withOpacity(0.5),
-            ),
-          ),
-        ],
-      ),
-    );
+        ),
+      );
+    }
+
+    return SavedVideoGrid();
   }
 }
 

@@ -699,7 +699,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                 const SizedBox(height: 38),
 
                 Obx(() {
-                  print("${!_isLoading.value}...........................");
+                  debugPrint("${!_isLoading.value}...........................");
                   return Column(
                     children: [
                       SizedBox(

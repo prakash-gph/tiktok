@@ -4,11 +4,15 @@ import 'package:video_player/video_player.dart';
 class VideoPalyerItem extends StatefulWidget {
   final String videoUrl;
   final bool isPlaying;
+  final Function(VideoPlayerController) onControllerReady;
+  final Function(VideoPlayerController) onControllerDispose;
 
   const VideoPalyerItem({
     super.key,
     required this.videoUrl,
-    this.isPlaying = true,
+    required this.isPlaying,
+    required this.onControllerReady,
+    required this.onControllerDispose,
   });
 
   @override

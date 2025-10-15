@@ -247,6 +247,8 @@
 
 //  add theme --------------------------->
 
+// ignore_for_file: library_private_types_in_public_api
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -265,12 +267,12 @@ class CommentInput extends StatefulWidget {
   final String videoOwnerId;
 
   const CommentInput({
-    Key? key,
+    super.key,
     required this.videoId,
     this.parentCommentId,
     required this.onCommentAdded,
     required this.videoOwnerId,
-  }) : super(key: key);
+  });
 
   @override
   _CommentInputState createState() => _CommentInputState();
@@ -285,7 +287,6 @@ class _CommentInputState extends State<CommentInput> {
   final Uuid _uuid = Uuid();
   bool _isSending = false;
   String? _userImageUrl;
-  String? _userName;
 
   @override
   void initState() {
@@ -304,11 +305,10 @@ class _CommentInputState extends State<CommentInput> {
         final userData = userDocumentSnapshot.data() as Map<String, dynamic>;
         setState(() {
           _userImageUrl = userData["image"];
-          _userName = userData["name"];
         });
       }
     } catch (e) {
-      print('Error loading user data: $e');
+      debugPrint('Error loading user data: $e');
     }
   }
 
@@ -483,7 +483,7 @@ class _CommentInputState extends State<CommentInput> {
           ),
         );
       }
-      print('Error adding comment: $e');
+      debugPrint('Error adding comment: $e');
     } finally {
       setState(() {
         _isSending = false;

@@ -43,6 +43,27 @@ class AppUser {
   static AppUser fromSnap(DocumentSnapshot snapshot) {
     var dataSnapshot = snapshot.data() as Map<String, dynamic>;
 
+    int parseCount(dynamic value) {
+      if (value is int) {
+        return value;
+      } else if (value is List) {
+        return value.length;
+      } else {
+        return 0;
+      }
+    }
+
+    // String parseString(String field, [String defaultValue = '']) {
+    //   return snapshot[field]?.toString() ?? defaultValue;
+    // }
+
+    // int parseInt(String field, [int defaultValue = 0]) {
+    //   final value = snapshot[field];
+    //   if (value is int) return value;
+    //   if (value is String) return int.tryParse(value) ?? defaultValue;
+    //   return defaultValue;
+    // }
+
     return AppUser(
       name: dataSnapshot["name"],
       uid: dataSnapshot["uid"],
@@ -52,8 +73,12 @@ class AppUser {
       x: dataSnapshot["x"],
       youtube: dataSnapshot["youtube"],
       instagram: dataSnapshot["instagram"],
-      followers: dataSnapshot["followers"] ?? 0,
-      following: dataSnapshot["following"] ?? 0,
+      followers: parseCount(dataSnapshot['followers']),
+      following: parseCount(dataSnapshot['following']),
+      //followers: dataSnapshot["followers"] ?? 0,
+      //following: dataSnapshot["following"] ?? 0,
+      // followers: (dataSnapshot['followers'] as List<dynamic>?)?.length ?? 0,
+      // following: (dataSnapshot['following'] as List<dynamic>?)?.length ?? 0,
       bio: dataSnapshot["bio"] ?? "",
     );
   }

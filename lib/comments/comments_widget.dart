@@ -530,6 +530,8 @@
 //   }
 // }
 
+// ignore_for_file: use_build_context_synchronously
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -549,13 +551,14 @@ class CommentWidget extends StatefulWidget {
   final Function(Comment) reply;
 
   const CommentWidget({
-    Key? key,
+    super.key,
     required this.comment,
     required this.videoId,
     required this.reply,
-  }) : super(key: key);
+  });
 
   @override
+  // ignore: library_private_types_in_public_api
   _CommentWidgetState createState() => _CommentWidgetState();
 }
 
@@ -576,11 +579,9 @@ class _CommentWidgetState extends State<CommentWidget> {
   @override
   void initState() {
     super.initState();
-    _isLiked =
-        widget.comment.likedBy?.contains(
-          AuthenticationController.instanceAuth.user.uid,
-        ) ??
-        false;
+    _isLiked = widget.comment.likedBy.contains(
+      AuthenticationController.instanceAuth.user.uid,
+    );
     _loadReplyCount();
     _loadUserData();
   }
@@ -598,7 +599,7 @@ class _CommentWidgetState extends State<CommentWidget> {
         });
       }
     } catch (e) {
-      print('Error loading user data: $e');
+      debugPrint('Error loading user data: $e');
     }
   }
 
@@ -612,7 +613,7 @@ class _CommentWidgetState extends State<CommentWidget> {
         _replyCount = count;
       });
     } catch (e) {
-      print('Error loading reply count: $e');
+      debugPrint('Error loading reply count: $e');
     }
   }
 
@@ -951,7 +952,7 @@ class _CommentWidgetState extends State<CommentWidget> {
         widget.comment.id,
       ),
       builder: (context, snapshot) {
-        if (snapshot.hasData && (snapshot.data! as int) > 0) {
+        if (snapshot.hasData && snapshot.data! > 0) {
           final replyCount = snapshot.data!;
           return Column(
             children: [

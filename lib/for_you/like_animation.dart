@@ -5,10 +5,10 @@ class LikeAnimation extends StatefulWidget {
   final VoidCallback onComplete;
 
   const LikeAnimation({
-    Key? key,
+    super.key,
     required this.controller,
     required this.onComplete,
-  }) : super(key: key);
+  });
 
   @override
   State<LikeAnimation> createState() => _LikeAnimationState();

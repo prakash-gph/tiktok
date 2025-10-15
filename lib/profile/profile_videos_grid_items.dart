@@ -8,11 +8,11 @@ class VideoGridItem extends StatelessWidget {
   //final int views;
 
   const VideoGridItem({
-    Key? key,
+    super.key,
     required this.videoId,
     required this.thumbnailUrl,
     //required this.views,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -47,11 +47,5 @@ class VideoGridItem extends StatelessWidget {
         ),
       ],
     );
-  }
-
-  String _formatViews(int views) {
-    if (views < 1000) return views.toString();
-    if (views < 1000000) return '${(views / 1000).toStringAsFixed(1)}K';
-    return '${(views / 1000000).toStringAsFixed(1)}M';
   }
 }
