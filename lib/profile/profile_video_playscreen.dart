@@ -314,7 +314,7 @@ class _VideoPlayerItemState extends State<_VideoPlayerItem>
                 const SizedBox(height: 16),
                 _buildActionButton(
                   icon: Ionicons.chatbubble_ellipses_outline,
-                  count: _formatCount(widget.video.totalComments!),
+                  count: _formatCount(widget.video.totalComments ?? 0),
                   color: Colors.white,
                   onTap: () {
                     _controller.pause();
@@ -339,7 +339,7 @@ class _VideoPlayerItemState extends State<_VideoPlayerItem>
 
                 _buildActionButton(
                   icon: Ionicons.eye_outline,
-                  count: _formatCount(widget.video.views!),
+                  count: _formatCount(widget.video.views ?? 0),
                   color: Colors.white,
                   onTap: () {},
                 ),

@@ -1039,6 +1039,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       stream: _firestore
           .collection('videos')
           .where('userId', isEqualTo: widget.userId)
+          .orderBy('publishedDateTime', descending: true)
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
