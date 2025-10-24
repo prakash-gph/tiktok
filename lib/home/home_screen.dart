@@ -56,14 +56,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final userId = FirebaseAuth.instance.currentUser!.uid;
 
-    // ForYouVideoScreen(
-    //   onProfileTab: () {
-    //     setState(() => screenIndex = 4);
-    //   },
-    // );
-
     final List<Widget> screenList = [
-      // 👇 Pass callback here
       TikTokMainScreen(
         onNotificationTap: () {
           setState(() => screenIndex = 3); // Go to Inbox tab
@@ -81,41 +74,45 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       body: screenList[screenIndex],
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: screenIndex,
-        onTap: (index) {
-          setState(() => screenIndex = index);
-        },
-        type: BottomNavigationBarType.fixed,
-        backgroundColor: Colors.white,
-        selectedItemColor: Colors.black,
-        unselectedItemColor: Colors.grey.shade500,
-        showSelectedLabels: true,
-        showUnselectedLabels: true,
-        items: [
-          BottomNavigationBarItem(
-            icon: _buildNavIcon(CupertinoIcons.house_fill, 0),
-            label: "Home",
-          ),
-          BottomNavigationBarItem(
-            icon: _buildNavIcon(CupertinoIcons.search, 1),
-            label: "Search",
-          ),
-          const BottomNavigationBarItem(icon: UploadCustomIcon(), label: ""),
 
-          BottomNavigationBarItem(
-            icon: _buildNavIconWithBadge(
-              CupertinoIcons.bubble_left_bubble_right_fill,
-              3,
-              _cachedUnreadCount,
+      bottomNavigationBar: SizedBox(
+        height: 63,
+        child: BottomNavigationBar(
+          currentIndex: screenIndex,
+          type: BottomNavigationBarType.fixed,
+          backgroundColor: Colors.white,
+          selectedItemColor: Colors.black,
+          unselectedItemColor: Colors.grey.shade500,
+          showSelectedLabels: true,
+          showUnselectedLabels: true,
+          onTap: (index) => setState(() => screenIndex = index),
+          items: [
+            BottomNavigationBarItem(
+              icon: _buildNavIcon(CupertinoIcons.house_fill, 0),
+              label: "Home",
             ),
-            label: "Inbox",
-          ),
-          BottomNavigationBarItem(
-            icon: _buildNavIcon(CupertinoIcons.person_crop_circle_fill, 4),
-            label: "Me",
-          ),
-        ],
+            BottomNavigationBarItem(
+              icon: _buildNavIcon(CupertinoIcons.search, 1),
+              label: "Search",
+            ),
+            const BottomNavigationBarItem(
+              icon: UploadCustomIcon(), //  now perfectly centered
+              label: "",
+            ),
+            BottomNavigationBarItem(
+              icon: _buildNavIconWithBadge(
+                CupertinoIcons.bubble_left_bubble_right_fill,
+                3,
+                _cachedUnreadCount,
+              ),
+              label: "Inbox",
+            ),
+            BottomNavigationBarItem(
+              icon: _buildNavIcon(CupertinoIcons.person_crop_circle_fill, 4),
+              label: "Me",
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -124,10 +121,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final bool isSelected = screenIndex == index;
     return AnimatedScale(
       duration: const Duration(milliseconds: 200),
-      scale: isSelected ? 1.2 : 1.0,
+      scale: isSelected ? 1.8 : 1.0,
       child: Icon(
         icon,
-        size: 28,
+        size: 17,
         color: isSelected ? Colors.black : Colors.grey.shade500,
       ),
     );
@@ -139,29 +136,31 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         AnimatedScale(
           duration: const Duration(milliseconds: 200),
-          scale: isSelected ? 1.2 : 1.0,
+          // scale: isSelected ? 1.8 : 1.0,
+          scale: 1.0,
+
           child: Icon(
             icon,
-            size: 28,
+            size: isSelected ? 25 : 17,
             color: isSelected ? Colors.black : Colors.grey.shade500,
           ),
         ),
         if (unreadCount > 0)
           Positioned(
-            right: 0,
-            top: 0,
+            right: -0,
+            top: -0,
             child: Container(
               padding: const EdgeInsets.all(2),
               decoration: BoxDecoration(
                 color: Colors.red,
                 borderRadius: BorderRadius.circular(10),
               ),
-              constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+              constraints: const BoxConstraints(minWidth: 2, minHeight: 2),
               child: Text(
                 unreadCount > 99 ? '99+' : unreadCount.toString(),
                 style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 10,
+                  fontSize: 8,
                   fontWeight: FontWeight.bold,
                 ),
                 textAlign: TextAlign.center,
