@@ -16,7 +16,7 @@
              -->
 
     <application
-        android:label="tiktok"
+        android:label="TikTok"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
