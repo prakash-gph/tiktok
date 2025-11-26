@@ -69,7 +69,6 @@ class Video {
     "totalComments": totalComments,
     "totalShares": totalShares,
     "descriptionTags": descriptionTags,
-
     "videoUrl": videoUrl,
     "thumbnailUrl": thumbnailUrl,
     "publishedDateTime": publishedDateTime,

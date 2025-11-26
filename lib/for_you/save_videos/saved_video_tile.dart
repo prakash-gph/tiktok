@@ -16,7 +16,7 @@ class SavedVideoTile extends StatelessWidget {
           () => Scaffold(
             backgroundColor: Colors.black,
             body: Center(
-              child: VideoPalyerItem(
+              child: VideoPlayerItem(
                 videoUrl: video.videoUrl,
                 isPlaying: true,
                 onControllerReady: (VideoPlayerController p1) {},

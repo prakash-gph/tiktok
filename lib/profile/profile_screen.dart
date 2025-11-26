@@ -805,129 +805,219 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  // Widget _buildProfileStats() {
+  //   // ignore: no_leading_underscores_for_local_identifiers
+  //   String _formatCount(int count) {
+  //     if (count < 1000) return count.toString();
+  //     if (count < 1000000) return '${(count / 1000).toStringAsFixed(1)}K';
+  //     return '${(count / 1000000).toStringAsFixed(1)}M';
+  //   }
+
+  //   return Container(
+  //     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+  //     child: Row(
+  //       mainAxisAlignment: MainAxisAlignment.spaceAround,
+  //       children: [
+  //         _buildStatItem(_formatCount(_videoCount), 'Videos'),
+  //         _buildTappableStatItem(
+  //           _formatCount(_followerCount),
+  //           'Followers',
+  //           _navigateToFollowers,
+  //         ),
+  //         _buildTappableStatItem(
+  //           _formatCount(_followingCount),
+  //           'Following',
+  //           _navigateToFollowing,
+  //         ),
+
+  //       ],
+
+  //     ),
+  //   );
+  // }
+
   Widget _buildProfileStats() {
-    // ignore: no_leading_underscores_for_local_identifiers
-    String _formatCount(int count) {
-      if (count < 1000) return count.toString();
-      if (count < 1000000) return '${(count / 1000).toStringAsFixed(1)}K';
-      return '${(count / 1000000).toStringAsFixed(1)}M';
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final textColor = isDark ? Colors.white : Colors.black;
+
+    Widget buildStat(String value, String label, VoidCallback onTap) {
+      return GestureDetector(
+        onTap: onTap,
+        child: AnimatedScale(
+          duration: const Duration(milliseconds: 150),
+          scale: 1.0,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: textColor, // Auto themed
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: textColor.withOpacity(0.8), // Subtle tint
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
     }
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          _buildStatItem(_formatCount(_videoCount), 'Videos'),
-          _buildTappableStatItem(
-            _formatCount(_followerCount),
-            'Followers',
+          // buildStat("$_followerCount", "Followers", _navigateToFollowers),
+          // buildStat("$_followingCount", "Following", _navigateToFollowing),
+          // buildStat("$_videoCount", "Videos", () {}),
+          _statItem(
+            "Followers",
+            formatNumber(_followerCount),
             _navigateToFollowers,
           ),
-          _buildTappableStatItem(
-            _formatCount(_followingCount),
-            'Following',
+          _statItem(
+            "Following",
+            formatNumber(_followingCount),
             _navigateToFollowing,
+          ),
+          _statItem("Videos", formatNumber(_videoCount), null),
+        ],
+      ),
+    );
+  }
+
+  Widget _statItem(String label, String count, VoidCallback? onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Text(
+            count,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Theme.of(context).textTheme.bodyLarge?.color,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 14,
+              color: Theme.of(
+                context,
+              ).textTheme.bodyLarge?.color?.withOpacity(0.7),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildStatItem(String value, String label) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: TextStyle(
-            color: Theme.of(context).textTheme.bodyLarge?.color,
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(
-            color: Theme.of(
-              context,
-            ).textTheme.bodyLarge?.color?.withOpacity(0.7),
-            fontSize: 12,
-          ),
-        ),
-      ],
-    );
-  }
+  // Widget _buildStatItem(String value, String label) {
+  //   return Column(
+  //     children: [
+  //       Text(
+  //         value,
+  //         style: TextStyle(
+  //           color: Theme.of(context).textTheme.bodyLarge?.color,
+  //           fontSize: 16,
+  //           fontWeight: FontWeight.bold,
+  //         ),
+  //       ),
+  //       const SizedBox(height: 4),
+  //       Text(
+  //         label,
+  //         style: TextStyle(
+  //           color: Theme.of(
+  //             context,
+  //           ).textTheme.bodyLarge?.color?.withOpacity(0.7),
+  //           fontSize: 12,
+  //         ),
+  //       ),
+  //     ],
+  //   );
+  // }
 
-  Widget _buildTappableStatItem(
-    String value,
-    String label,
-    VoidCallback onTap,
-  ) {
-    return GestureDetector(
-      onTap: onTap,
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              // colors: [Color(0xFF7E5555), Color(0xFF541010)],
-              colors: [
-                Color.fromARGB(255, 161, 182, 219),
-                Color.fromARGB(255, 26, 152, 210),
-              ],
-            ),
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.3),
-                blurRadius: 8,
-                offset: const Offset(0, 4),
-              ),
-            ],
-            border: Border.all(
-              color: Theme.of(context).brightness == Brightness.dark
-                  ? Colors.grey[700]!
-                  : Colors.grey[300]!,
-              width: 1,
-            ),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                value,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  shadows: [
-                    Shadow(
-                      blurRadius: 4,
-                      color: Colors.black,
-                      offset: Offset(1, 1),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                label,
-                style: TextStyle(
-                  color: Colors.grey[200],
-                  fontSize: 15,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  // Widget _buildTappableStatItem(
+  //   String value,
+  //   String label,
+  //   VoidCallback onTap,
+  // ) {
+  //   return GestureDetector(
+  //     onTap: onTap,
+  //     child: MouseRegion(
+  //       cursor: SystemMouseCursors.click,
+  //       child: Container(
+  //         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+  //         decoration: BoxDecoration(
+  //           // gradient: const LinearGradient(
+  //           //   begin: Alignment.topLeft,
+  //           //   end: Alignment.bottomRight,
+  //           //   // colors: [Color(0xFF7E5555), Color(0xFF541010)],
+  //           //   colors: [
+  //           //     Color.fromARGB(255, 161, 182, 219),
+  //           //     Color.fromARGB(255, 43, 182, 246),
+  //           //   ],
+  //           // ),
+  //           borderRadius: BorderRadius.circular(16),
+  //           boxShadow: [
+  //             // BoxShadow(
+  //             //   color: Colors.black.withOpacity(0.0),
+  //             //   blurRadius: 8,
+  //             //   offset: const Offset(0, 4),
+  //             // ),
+  //           ],
+  //           border: Border.all(
+  //             color: Theme.of(context).brightness == Brightness.dark
+  //                 ? const Color.fromARGB(255, 103, 103, 103)
+  //                 : const Color.fromARGB(255, 212, 212, 212)!,
+  //             width: 1,
+  //           ),
+  //         ),
+  //         child: Column(
+  //           mainAxisAlignment: MainAxisAlignment.center,
+  //           children: [
+  //             Text(
+  //               value,
+  //               style: const TextStyle(
+  //                 color: Colors.white,
+  //                 fontSize: 18,
+  //                 fontWeight: FontWeight.bold,
+  //                 shadows: [
+  //                   Shadow(
+  //                     blurRadius: 4,
+  //                     color: Colors.black,
+  //                     offset: Offset(1, 1),
+  //                   ),
+  //                 ],
+  //               ),
+  //             ),
+  //             const SizedBox(height: 6),
+  //             Text(
+  //               label,
+  //               style: TextStyle(
+  //                 color: Colors.grey[200],
+  //                 fontSize: 15,
+  //                 fontWeight: FontWeight.w900,
+  //               ),
+  //             ),
+  //           ],
+  //         ),
+  //       ),
+  //     ),
+  //   );
+  //}
 
   Widget _buildActionButtons() {
     final buttonStyle = ElevatedButton.styleFrom(
@@ -1196,5 +1286,17 @@ class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
   @override
   bool shouldRebuild(_SliverAppBarDelegate oldDelegate) {
     return false;
+  }
+}
+
+String formatNumber(int number) {
+  if (number >= 1000000000) {
+    return "${(number / 1000000000).toStringAsFixed(1)}B";
+  } else if (number >= 1000000) {
+    return "${(number / 1000000).toStringAsFixed(1)}M";
+  } else if (number >= 1000) {
+    return "${(number / 1000).toStringAsFixed(1)}K";
+  } else {
+    return number.toString();
   }
 }

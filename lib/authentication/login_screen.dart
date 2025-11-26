@@ -284,7 +284,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         Colors.purple,
                         Colors.blueAccent,
                       ],
-                      animationDuration: 5,
+                      animationDuration: 12,
                       backColor: Colors.grey[800]!,
                       size: 60,
                     );

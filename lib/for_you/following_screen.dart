@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:get/get.dart';
 import 'package:ionicons/ionicons.dart';
 import 'package:share_plus/share_plus.dart';
@@ -17,6 +18,7 @@ import 'package:tiktok/upload_videos/get_video_url_controller.dart';
 import 'package:tiktok/upload_videos/video.dart';
 import 'package:tiktok/upload_videos/video_palyer_item.dart';
 import 'package:tiktok/widgets/circle_animation_profile.dart';
+import 'package:video_player/video_player.dart';
 
 class FollowingScreen extends StatefulWidget {
   final String userId;
@@ -32,6 +34,8 @@ class FollowingScreenState extends State<FollowingScreen>
   final GetVideoUrlController videoController = Get.put(
     GetVideoUrlController(),
   );
+
+  ValueNotifier<bool> showTopBarNotifier = ValueNotifier(true);
   final FollowService _followService = FollowService();
   final String authUserId = AuthenticationController.instanceAuth.user.uid;
 
@@ -44,8 +48,18 @@ class FollowingScreenState extends State<FollowingScreen>
   final Set<String> _viewedVideos = {};
 
   List<VideoItem> followingVideos = [];
+  final Map<String, VideoPlayerController> _videoControllers = {};
+
   bool _isLoading = true;
   bool _isDisposed = false;
+
+  void setPaused(bool value) {
+    if (!_isDisposed) {
+      setState(() {
+        _isVideoPaused = value;
+      });
+    }
+  }
 
   @override
   void initState() {
@@ -64,6 +78,18 @@ class FollowingScreenState extends State<FollowingScreen>
     _animationController.dispose();
     _pageController.dispose();
     super.dispose();
+  }
+
+  void pauseAllVideos() {
+    for (var controller in _videoControllers.values) {
+      if (controller.value.isPlaying) controller.pause();
+    }
+  }
+
+  void resumeAllVideos() {
+    for (var controller in _videoControllers.values) {
+      if (!controller.value.isPlaying) controller.play();
+    }
   }
 
   Future<void> _loadFollowingVideos() async {
@@ -277,7 +303,7 @@ class FollowingScreenState extends State<FollowingScreen>
     required String count,
     required Color color,
     required VoidCallback onTap,
-    double size = 28,
+    double size = 24,
   }) {
     return SizedBox(
       width: 60,
@@ -310,14 +336,13 @@ class FollowingScreenState extends State<FollowingScreen>
   }
 
   Widget _buildFollowButton(String userId) {
-    // Hide the button if it's the current user's own profile
     if (userId == authUserId) return const SizedBox.shrink();
 
     return FutureBuilder<bool>(
       future: _followService.isFollowing(userId),
       builder: (context, snapshot) {
-        final bool isFollowing = snapshot.data ?? false;
-        final bool isInitialLoading =
+        bool isFollowing = snapshot.data ?? false;
+        bool isInitialLoading =
             snapshot.connectionState == ConnectionState.waiting;
 
         return StatefulBuilder(
@@ -325,21 +350,27 @@ class FollowingScreenState extends State<FollowingScreen>
             bool isLoading = false;
 
             Future<void> handleFollowAction() async {
-              setInnerState(() => isLoading = true);
+              //  Instant UI update first
+              setInnerState(() {
+                isFollowing = !isFollowing;
+              });
+
               try {
                 if (isFollowing) {
-                  await _followService.unfollowUser(userId);
-                } else {
                   await _followService.followUser(userId);
+                } else {
+                  await _followService.unfollowUser(userId);
                 }
-              } finally {
-                setInnerState(() => isLoading = false);
-                if (mounted) setState(() {});
+              } catch (e) {
+                //  Revert if Firestore fails
+                setInnerState(() {
+                  isFollowing = !isFollowing;
+                });
               }
             }
 
             return AnimatedSwitcher(
-              duration: const Duration(milliseconds: 250),
+              duration: const Duration(milliseconds: 200),
               transitionBuilder: (child, anim) =>
                   ScaleTransition(scale: anim, child: child),
               child: InkWell(
@@ -349,7 +380,7 @@ class FollowingScreenState extends State<FollowingScreen>
                     ? null
                     : handleFollowAction,
                 child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 250),
+                  duration: const Duration(milliseconds: 200),
                   curve: Curves.easeInOut,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 14,
@@ -366,42 +397,20 @@ class FollowingScreenState extends State<FollowingScreen>
                     gradient: isFollowing
                         ? null
                         : const LinearGradient(
-                            colors: [
-                              Color(0xFFFF0069), // Instagram pink/red
-                              Color(0xFFFFF600), // Instagram yellow
-                            ],
+                            colors: [Color(0xFFFF0069), Color(0xFFFFF600)],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                           ),
                     color: isFollowing ? Colors.white.withOpacity(0.12) : null,
-                    boxShadow: [
-                      if (!isFollowing)
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.3),
-                          offset: const Offset(0, 2),
-                          blurRadius: 4,
-                        ),
-                    ],
                   ),
-                  child: isInitialLoading || isLoading
-                      ? const SizedBox(
-                          width: 12,
-                          height: 12,
-                          // child: CircularProgressIndicator(
-                          //   strokeWidth: 2,
-                          //   valueColor: AlwaysStoppedAnimation<Color>(
-                          //     Colors.white,
-                          //   ),
-                          // ),
-                        )
-                      : Text(
-                          isFollowing ? 'Following' : 'Follow',
-                          style: TextStyle(
-                            color: isFollowing ? Colors.white : Colors.black,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
-                        ),
+                  child: Text(
+                    isFollowing ? 'Following' : 'Follow',
+                    style: TextStyle(
+                      color: isFollowing ? Colors.white : Colors.black,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
                 ),
               ),
             );
@@ -423,7 +432,7 @@ class FollowingScreenState extends State<FollowingScreen>
             children: [
               Expanded(
                 child: Container(
-                  padding: const EdgeInsets.only(left: 10, bottom: 10),
+                  padding: const EdgeInsets.only(left: 10, bottom: 30),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -510,7 +519,7 @@ class FollowingScreenState extends State<FollowingScreen>
                                 constraints: const BoxConstraints(
                                   minWidth: 50,
                                   maxWidth:
-                                      100, // keeps it responsive on smaller screens
+                                      180, // keeps it responsive on smaller screens
                                 ),
                                 child: _buildFollowButton(video.userId!),
                               ),
@@ -536,7 +545,7 @@ class FollowingScreenState extends State<FollowingScreen>
                             child: Text(
                               video.artistSongName ?? 'Original sound',
                               style: const TextStyle(
-                                fontSize: 14,
+                                fontSize: 11,
                                 color: Colors.white,
                                 fontWeight: FontWeight.w500,
                               ),
@@ -552,8 +561,8 @@ class FollowingScreenState extends State<FollowingScreen>
 
               // 🎯 Right Action Buttons Column with Ionicons
               Container(
-                width: 70,
-                margin: EdgeInsets.only(bottom: size.height / 15, right: 8),
+                width: 55,
+                margin: EdgeInsets.only(bottom: size.height / 26, right: 2),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
@@ -582,7 +591,7 @@ class FollowingScreenState extends State<FollowingScreen>
                       },
                     ),
 
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 5),
 
                     // Comment Button with Ionicons
                     _buildActionButton(
@@ -611,7 +620,7 @@ class FollowingScreenState extends State<FollowingScreen>
                         });
                       },
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 5),
 
                     // Share Button with Ionicons
                     _buildActionButton(
@@ -625,7 +634,7 @@ class FollowingScreenState extends State<FollowingScreen>
                         video.userId!,
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 5),
 
                     // Views Counter with Ionicons
                     _buildActionButton(
@@ -635,7 +644,7 @@ class FollowingScreenState extends State<FollowingScreen>
                       onTap: () {},
                     ),
 
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 5),
 
                     StreamBuilder<bool>(
                       stream: SavedVideoService().isVideoSaved(video.videoId!),
@@ -648,12 +657,12 @@ class FollowingScreenState extends State<FollowingScreen>
                             color: isSaved
                                 ? const Color.fromARGB(255, 255, 255, 255)
                                 : Colors.white,
-                            size: 28,
+                            size: 25,
                           ),
                           onPressed: () async {
                             final service = SavedVideoService();
                             if (isSaved) {
-                              // 👇 remove (unsave)
+                              //  remove (unsave)
                               await service.unsaveVideo(video.videoId!);
                             } else {
                               // 👇 add (save)
@@ -664,12 +673,12 @@ class FollowingScreenState extends State<FollowingScreen>
                       },
                     ),
 
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 5),
 
                     CircleAnimationProfile(
                       child: Container(
-                        width: 45,
-                        height: 45,
+                        width: 38,
+                        height: 38,
                         decoration: BoxDecoration(
                           gradient: const LinearGradient(
                             colors: [Colors.purple, Colors.pink],
@@ -679,7 +688,7 @@ class FollowingScreenState extends State<FollowingScreen>
                         child: const Icon(
                           Icons.music_note,
                           color: Colors.white,
-                          size: 20,
+                          size: 23,
                         ),
                       ),
                     ),
@@ -740,67 +749,114 @@ class FollowingScreenState extends State<FollowingScreen>
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          PageView.builder(
-            controller: _pageController,
-            itemCount: followingVideos.length,
-            scrollDirection: Axis.vertical,
-            physics: const CustomScrollPhysics(),
-            onPageChanged: _onPageChanged,
-            itemBuilder: (context, index) {
-              final item = followingVideos[index];
-              final isCurrent = index == _currentPage;
-
-              return Stack(
-                fit: StackFit.expand,
-                children: [
-                  // 🎥 Video layer handles only tap & double-tap
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: _togglePlayPause,
-                    onDoubleTap: () {
-                      if (followingVideos.isEmpty || _isDisposed) return;
-
-                      final video = item.video;
-                      final alreadyLiked = video.safeLikesList.contains(
-                        authUserId,
-                      );
-
-                      _showLikeAnimation();
-
-                      setState(() {
-                        if (!alreadyLiked) {
-                          video.safeLikesList.add(authUserId);
-                        }
-                      });
-
-                      if (!alreadyLiked) {
-                        unawaited(
-                          videoController.likeVideo(
-                            video.videoId!,
-                            video.userId!,
-                            video.userName!,
-                            video.thumbnailUrl!,
-                          ),
-                        );
-                      }
-                    },
-                    child: VideoPalyerItem(
-                      videoUrl: item.video.videoUrl!,
-                      isPlaying: isCurrent && !_isVideoPaused,
-                      onControllerReady: (_) {},
-                      onControllerDispose: (_) {},
-                    ),
-                  ),
-
-                  // 🧩 Overlay with profile, follow, like, etc.
-                  IgnorePointer(
-                    ignoring:
-                        false, // important: allows taps on overlay buttons
-                    child: _buildVideoOverlay(item, size),
-                  ),
-                ],
-              );
+          NotificationListener<ScrollNotification>(
+            onNotification: (scrollNotification) {
+              if (scrollNotification is UserScrollNotification) {
+                if (scrollNotification.direction == ScrollDirection.reverse) {
+                  // Scrolling up — hide
+                  showTopBarNotifier.value = false;
+                } else if (scrollNotification.direction ==
+                    ScrollDirection.forward) {
+                  // Scrolling down — show
+                  showTopBarNotifier.value = true;
+                }
+              }
+              return true;
             },
+
+            child: PageView.builder(
+              controller: _pageController,
+              itemCount: followingVideos.length,
+              scrollDirection: Axis.vertical,
+              physics: const CustomScrollPhysics(),
+
+              onPageChanged: _onPageChanged,
+              itemBuilder: (context, index) {
+                final item = followingVideos[index];
+                final isCurrent = index == _currentPage;
+
+                return Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // 🎥 Video layer handles only tap & double-tap
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: _togglePlayPause,
+                      onDoubleTap: () {
+                        if (followingVideos.isEmpty || _isDisposed) return;
+
+                        final video = item.video;
+                        final alreadyLiked = video.safeLikesList.contains(
+                          authUserId,
+                        );
+
+                        _showLikeAnimation();
+
+                        setState(() {
+                          if (!alreadyLiked) {
+                            video.safeLikesList.add(authUserId);
+                          }
+                        });
+
+                        if (!alreadyLiked) {
+                          unawaited(
+                            videoController.likeVideo(
+                              video.videoId!,
+                              video.userId!,
+                              video.userName!,
+                              video.thumbnailUrl!,
+                            ),
+                          );
+                        }
+                      },
+                      // child: VideoPlayerItem(
+                      //   videoUrl: item.video.videoUrl!,
+                      //   isPlaying: isCurrent && !_isVideoPaused,
+                      //   onControllerReady: (_) {},
+                      //   onControllerDispose: (_) {},
+                      //   key: Key('video_player_${item.video.videoId}_$index'),
+                      // ),
+
+                      // child: VideoPlayerItem(
+                      //   key: Key('video_player_${item.video.videoId}_$index'),
+                      //   videoUrl: item.video.videoUrl!,
+                      //   isPlaying: isCurrent && !_isVideoPaused,
+
+                      //   //  Optional preloading logic hooks
+                      //   onControllerReady: (controller) {
+                      //     // add to preloaded set if not already added
+                      //     if (!followingVideos.contains(controller)) {
+                      //       followingVideos.add(item);
+                      //     }
+                      //   },
+                      //   onControllerDispose: (controller) {
+                      //     followingVideos.remove(item);
+                      //   },
+                      // ),
+                      child: VideoPlayerItem(
+                        key: Key('video_player_${item.video.videoId}_$index'),
+                        videoUrl: item.video.videoUrl!,
+                        isPlaying: isCurrent && !_isVideoPaused,
+                        onControllerReady: (controller) {
+                          _videoControllers[item.video.videoId!] = controller;
+                        },
+                        onControllerDispose: (controller) {
+                          _videoControllers.remove(item.video.videoId!);
+                          controller.dispose();
+                        },
+                      ),
+                    ),
+
+                    // 🧩 Overlay with profile, follow, like, etc.
+                    IgnorePointer(
+                      ignoring:
+                          false, // important: allows taps on overlay buttons
+                      child: _buildVideoOverlay(item, size),
+                    ),
+                  ],
+                );
+              },
+            ),
           ),
         ],
       ),

@@ -1,51 +1,3 @@
-// import 'package:flutter/material.dart';
-
-// class UploadCustomIcon extends StatelessWidget {
-//   const UploadCustomIcon({super.key});
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return SizedBox(
-//       width: 45,
-//       height: 25,
-//       child: Stack(
-//         children: [
-//           Container(
-//             margin: const EdgeInsets.only(left: 12),
-//             width: 36,
-//             decoration: BoxDecoration(
-//               color: const Color.fromARGB(255, 250, 45, 108),
-//               borderRadius: BorderRadius.circular(8),
-//             ),
-//           ),
-
-//           Container(
-//             margin: const EdgeInsets.only(right: 12),
-//             width: 36,
-//             decoration: BoxDecoration(
-//               color: const Color.fromARGB(255, 24, 206, 231),
-//               borderRadius: BorderRadius.circular(8),
-//             ),
-//           ),
-
-//           Center(
-//             child: Container(
-//               height: double.infinity,
-//               width: 38,
-//               decoration: BoxDecoration(
-//                 color: Colors.white,
-//                 borderRadius: BorderRadius.circular(8),
-//               ),
-
-//               child: const Icon(Icons.add, color: Colors.black, size: 25),
-//             ),
-//           ),
-//         ],
-//       ),
-//     );
-//   }
-// }
-
 import 'package:flutter/material.dart';
 
 class UploadCustomIcon extends StatelessWidget {
@@ -53,18 +5,18 @@ class UploadCustomIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      alignment: Alignment.center, //  ensures perfect vertical centering
-      height: 28, //  slightly taller for symmetry
-      width: 34, //  proportional width
+    return SizedBox(
+      width: 45, // slightly wider for TikTok-style proportions
+      height: 32, // taller but still safe from overflow
       child: Stack(
-        alignment: Alignment.center, // centers all layers
+        alignment: Alignment.center,
         clipBehavior: Clip.none,
         children: [
+          // Left pink block
           Positioned(
-            left: 0,
+            left: 5,
             child: Container(
-              width: 38,
+              width: 28,
               height: 28,
               decoration: BoxDecoration(
                 color: const Color(0xFFFA2D6C),
@@ -72,10 +24,12 @@ class UploadCustomIcon extends StatelessWidget {
               ),
             ),
           ),
+
+          // Right blue block
           Positioned(
-            right: 0,
+            right: 5,
             child: Container(
-              width: 38,
+              width: 28,
               height: 28,
               decoration: BoxDecoration(
                 color: const Color(0xFF18CEE7),
@@ -83,18 +37,16 @@ class UploadCustomIcon extends StatelessWidget {
               ),
             ),
           ),
+
+          // Center white box (main button)
           Container(
-            width: 42,
+            width: 30,
             height: 30,
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(
-              Icons.add,
-              color: Colors.black,
-              size: 26, //  matches your other icons better
-            ),
+            child: const Icon(Icons.add, color: Colors.black, size: 28),
           ),
         ],
       ),
