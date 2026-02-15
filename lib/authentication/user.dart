@@ -53,17 +53,6 @@ class AppUser {
       }
     }
 
-    // String parseString(String field, [String defaultValue = '']) {
-    //   return snapshot[field]?.toString() ?? defaultValue;
-    // }
-
-    // int parseInt(String field, [int defaultValue = 0]) {
-    //   final value = snapshot[field];
-    //   if (value is int) return value;
-    //   if (value is String) return int.tryParse(value) ?? defaultValue;
-    //   return defaultValue;
-    // }
-
     return AppUser(
       name: dataSnapshot["name"],
       uid: dataSnapshot["uid"],
