@@ -4,7 +4,7 @@ import 'package:get/get.dart';
 import 'package:tiktok/notification/notification_controller.dart';
 //import 'package:share_plus/share_plus.dart';
 
-void shareVideoAndTrack(String videoId, String userId) async {
+shareVideoAndTrack(String videoId, String userId) async {
   final NotificationController notificationController =
       Get.find<NotificationController>();
 

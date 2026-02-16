@@ -1,130 +1,4 @@
-// // lib/screens/follow_list_screen.dart
-// import 'package:flutter/material.dart';
-// import 'package:cloud_firestore/cloud_firestore.dart';
-// import 'package:cached_network_image/cached_network_image.dart';
-// import 'package:tiktok/authentication/user.dart';
-// import 'package:tiktok/profile/profile_screen.dart';
-
-// class FollowListScreen extends StatefulWidget {
-//   final String userId;
-//   final String mode; // 'followers' or 'following'
-
-//   const FollowListScreen({Key? key, required this.userId, required this.mode})
-//     : super(key: key);
-
-//   @override
-//   _FollowListScreenState createState() => _FollowListScreenState();
-// }
-
-// class _FollowListScreenState extends State<FollowListScreen> {
-//   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return Scaffold(
-//       backgroundColor: Colors.black,
-//       appBar: AppBar(
-//         backgroundColor: Colors.black,
-//         title: Text(
-//           widget.mode == 'followers' ? 'Followers' : 'Following',
-//           style: TextStyle(color: Colors.white),
-//         ),
-//       ),
-//       body: StreamBuilder<QuerySnapshot>(
-//         stream: _firestore
-//             .collection('users')
-//             .doc(widget.userId)
-//             .collection(widget.mode)
-//             .snapshots(),
-//         builder: (context, snapshot) {
-//           if (!snapshot.hasData) {
-//             return Center(child: CircularProgressIndicator(color: Colors.red));
-//           }
-
-//           if (snapshot.data!.docs.isEmpty) {
-//             return Center(
-//               child: Text(
-//                 widget.mode == 'followers'
-//                     ? 'No followers yet'
-//                     : 'Not following anyone',
-//                 style: TextStyle(color: Colors.grey),
-//               ),
-//             );
-//           }
-
-//           return ListView.builder(
-//             itemCount: snapshot.data!.docs.length,
-//             itemBuilder: (context, index) {
-//               final followerDoc = snapshot.data!.docs[index];
-//               return FutureBuilder<DocumentSnapshot>(
-//                 future: _firestore
-//                     .collection('users')
-//                     .doc(followerDoc.id)
-//                     .get(),
-//                 builder: (context, userSnapshot) {
-//                   if (!userSnapshot.hasData) {
-//                     return ListTile(
-//                       leading: CircleAvatar(backgroundColor: Colors.grey),
-//                       title: Text(
-//                         'Loading...',
-//                         style: TextStyle(color: Colors.white),
-//                       ),
-//                     );
-//                   }
-
-//                   if (!userSnapshot.data!.exists) {
-//                     return ListTile(
-//                       title: Text(
-//                         'User not found',
-//                         style: TextStyle(color: Colors.grey),
-//                       ),
-//                     );
-//                   }
-
-//                   final user = AppUser.fromSnap(userSnapshot.data!);
-//                   return ListTile(
-//                     leading: CircleAvatar(
-//                       backgroundImage: CachedNetworkImageProvider(
-//                         "${user.image}",
-//                       ),
-//                       backgroundColor: Colors.grey[800],
-//                     ),
-//                     title: Text(
-//                       "${user.name}",
-//                       style: TextStyle(color: Colors.white),
-//                     ),
-//                     // subtitle: Text(
-//                     //   user.bio!.isNotEmpty ? "${user.bio}" : "",
-//                     //   style: TextStyle(color: Colors.grey),
-//                     //   maxLines: 1,
-//                     //   overflow: TextOverflow.ellipsis,
-//                     // ),
-//                     onTap: () {
-//                       Navigator.push(
-//                         context,
-//                         MaterialPageRoute(
-//                           builder: (context) => ProfileScreen(
-//                             userId: "${user.uid}",
-//                             isCurrentUser: false,
-//                           ),
-//                         ),
-//                       );
-//                     },
-//                   );
-//                 },
-//               );
-//             },
-//           );
-//         },
-//       ),
-//     );
-//   }
-// }
-
-//  add theme
-
-// ignore_for_file: library_private_types_in_public_api
-
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -138,6 +12,7 @@ class FollowListScreen extends StatefulWidget {
   const FollowListScreen({super.key, required this.userId, required this.mode});
 
   @override
+  // ignore: library_private_types_in_public_api
   _FollowListScreenState createState() => _FollowListScreenState();
 }
 
@@ -336,7 +211,25 @@ class _FollowListScreenState extends State<FollowListScreen> {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
+
           onTap: () {
+            final currentUserId = FirebaseAuth.instance.currentUser!.uid;
+
+            // If user taps their own profile in the list → open real profile screen
+            if (user.uid == currentUserId) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ProfileScreen(
+                    userId: currentUserId,
+                    isCurrentUser: true, // IMPORTANT
+                  ),
+                ),
+              );
+              return;
+            }
+
+            // Otherwise → open other user's profile normally
             Navigator.push(
               context,
               MaterialPageRoute(
@@ -345,24 +238,76 @@ class _FollowListScreenState extends State<FollowListScreen> {
               ),
             );
           },
+
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Row(
               children: [
-                // Profile Avatar
                 Hero(
                   tag: 'profile_${user.uid}_${widget.mode}',
-                  child: CircleAvatar(
-                    radius: 24,
-                    backgroundImage: CachedNetworkImageProvider(
-                      "${user.image}",
+                  child: Container(
+                    width: 50,
+                    height: 50,
+                    padding: EdgeInsets.all(2.5),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: Theme.of(context).brightness == Brightness.dark
+                          ? LinearGradient(
+                              colors: [
+                                Colors.white.withOpacity(0.15),
+                                Colors.white.withOpacity(0.05),
+                              ],
+                            )
+                          : LinearGradient(
+                              colors: [
+                                Colors.black.withOpacity(0.10),
+                                Colors.black.withOpacity(0.03),
+                              ],
+                            ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.15),
+                          blurRadius: 8,
+                          offset: Offset(0, 3),
+                        ),
+                      ],
                     ),
-                    backgroundColor:
-                        Theme.of(context).brightness == Brightness.dark
-                        ? Colors.grey[800]
-                        : Colors.grey[300],
+                    child: ClipOval(
+                      child: CachedNetworkImage(
+                        imageUrl: user.image ?? "",
+                        fit: BoxFit.cover,
+                        fadeInDuration: Duration(milliseconds: 300),
+                        errorWidget: (context, url, error) => Container(
+                          color: Colors.grey[300],
+                          child: Icon(
+                            Icons.person,
+                            size: 28,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        placeholder: (context, url) => Container(
+                          color: Colors.grey[300],
+                          child: Center(
+                            child: SizedBox(
+                              height: 22,
+                              width: 22,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.2,
+                                valueColor: AlwaysStoppedAnimation(
+                                  Theme.of(context).brightness ==
+                                          Brightness.dark
+                                      ? Colors.white70
+                                      : Colors.black54,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
+
                 const SizedBox(width: 12),
 
                 // User Info

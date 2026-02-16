@@ -1,1070 +1,3 @@
-// import 'dart:async';
-// import 'package:cloud_firestore/cloud_firestore.dart';
-// import 'package:flutter/material.dart';
-// import 'package:flutter/rendering.dart';
-// import 'package:get/get.dart';
-// import 'package:ionicons/ionicons.dart';
-// import 'package:tiktok/authentication/authentication_controller.dart';
-// import 'package:tiktok/comments/comments_screen.dart';
-// import 'package:tiktok/follow_service/follow_service.dart';
-// import 'package:tiktok/for_you/custom_scroll_physics.dart';
-// import 'package:tiktok/for_you/like_animation.dart';
-// import 'package:tiktok/for_you/save_videos/saved_video_controller.dart';
-// import 'package:tiktok/profile/profile_screen.dart';
-// import 'package:tiktok/share_vieos/share_videos.models.dart';
-// import 'package:tiktok/upload_videos/get_video_url_controller.dart';
-// import 'package:tiktok/upload_videos/video_palyer_item.dart';
-// import 'package:tiktok/widgets/circle_animation_profile.dart';
-// import 'package:share_plus/share_plus.dart';
-// import 'dart:math';
-// import 'package:video_player/video_player.dart';
-
-// class ForYouVideoScreen extends StatefulWidget {
-//   final VoidCallback? onProfileTab;
-//   const ForYouVideoScreen({super.key, this.onProfileTab});
-
-//   @override
-//   State<ForYouVideoScreen> createState() => VideoScreenState();
-// }
-
-// class VideoScreenState extends State<ForYouVideoScreen>
-//     with SingleTickerProviderStateMixin {
-//   final List<VideoPlayerController> _videoControllers = [];
-
-//   final ValueNotifier<bool> showTopBarNotifier = ValueNotifier(true);
-
-//   // Add this below your existing methods inside VideoScreenState
-//   void setPaused(bool value) {
-//     if (!_isDisposed) {
-//       setState(() {
-//         _isVideoPaused = value;
-//       });
-//     }
-//   }
-
-//   final GetVideoUrlController videoController = Get.put(
-//     GetVideoUrlController(),
-//   );
-//   final PageController _pageController = PageController(
-//     viewportFraction: 1.0,
-//     keepPage: true,
-//   );
-
-//   int _currentPage = 0;
-//   bool _isVideoPaused = false;
-//   // bool _isLongPressing = false;
-//   late AnimationController _animationController;
-//   OverlayEntry? _likeAnimationOverlay;
-//   final Random _random = Random();
-//   final List<int> _displayedVideoIndices = [];
-//   bool _isInitialLoad = true;
-//   final String authUserId = AuthenticationController.instanceAuth.user.uid;
-//   final FollowService _followService = FollowService();
-//   // Cache for notification count
-//   StreamSubscription<QuerySnapshot>? _notificationSubscription;
-//   final Set<String> _viewedVideos = {};
-//   bool _isDisposed = false;
-//   @override
-//   void initState() {
-//     super.initState();
-//     _animationController = AnimationController(
-//       vsync: this,
-//       duration: const Duration(milliseconds: 500),
-//     );
-//   }
-
-//   void _loadInitialVideos() {
-//     if (videoController.videoList.isNotEmpty) {
-//       _loadMoreVideos(count: min(3, videoController.videoList.length));
-//     }
-//   }
-
-//   Future<void> _incrementVideoViews(String videoId) async {
-//     if (_viewedVideos.contains(videoId)) return;
-
-//     try {
-//       final videoRef = FirebaseFirestore.instance
-//           .collection('videos')
-//           .doc(videoId);
-//       await videoRef.update({'views': FieldValue.increment(1)});
-//       _viewedVideos.add(videoId);
-//     } catch (e) {
-//       debugPrint('Failed to increment views for $videoId: $e');
-//     }
-//   }
-
-//   void _loadMoreVideos({int count = 3}) {
-//     if (videoController.videoList.isEmpty) return;
-
-//     final List<int> availableIndices = List.generate(
-//       videoController.videoList.length,
-//       (index) => index,
-//     );
-//     availableIndices.removeWhere(
-//       (index) => _displayedVideoIndices.contains(index),
-//     );
-
-//     if (availableIndices.length < count) {
-//       _displayedVideoIndices.clear();
-//       availableIndices.addAll(
-//         List.generate(videoController.videoList.length, (index) => index),
-//       );
-//       availableIndices.shuffle(_random);
-//     } else {
-//       availableIndices.shuffle(_random);
-//     }
-
-//     final newIndices = availableIndices.take(count).toList();
-//     _displayedVideoIndices.addAll(newIndices);
-
-//     if (mounted) setState(() {});
-//   }
-
-//   void _onPageChanged(int page) async {
-//     if (_isDisposed) return;
-//     setState(() {
-//       _currentPage = page;
-//       _isVideoPaused = false; // Auto-play when changing videos
-//     });
-
-//     for (int i = 0; i < _videoControllers.length; i++) {
-//       if (i == page) {
-//         _videoControllers[i].play();
-//       } else {
-//         _videoControllers[i].pause();
-//       }
-//     }
-//     if (_displayedVideoIndices.isEmpty) return;
-
-//     final videoIndex = _displayedVideoIndices[page];
-//     final data = videoController.videoList[videoIndex];
-
-//     if (data.videoId != null) {
-//       _incrementVideoViews(data.videoId!);
-//     }
-
-//     if (page >= _displayedVideoIndices.length - 2) {
-//       _loadMoreVideos(count: 3);
-//     }
-//   }
-
-//   void _togglePlayPause() {
-//     if (!_isDisposed) {
-//       setState(() => _isVideoPaused = !_isVideoPaused);
-//     }
-//   }
-
-//   @override
-//   void dispose() {
-//     _pageController.dispose();
-//     _animationController.dispose();
-//     _isDisposed = true;
-//     _removeLikeAnimation();
-//     _notificationSubscription?.cancel();
-//     _videoControllers.clear();
-//     super.dispose();
-//   }
-
-//   void _showLikeAnimation() {
-//     _removeLikeAnimation();
-
-//     final RenderBox? renderBox = context.findRenderObject() as RenderBox?;
-//     if (renderBox == null) return;
-
-//     final position = renderBox.localToGlobal(
-//       Offset(renderBox.size.width / 2, renderBox.size.height / 2),
-//     );
-
-//     _likeAnimationOverlay = OverlayEntry(
-//       builder: (context) => Positioned(
-//         top: position.dy - 50,
-//         left: position.dx - 50,
-//         child: LikeAnimation(
-//           controller: _animationController,
-//           onComplete: _removeLikeAnimation,
-//         ),
-//       ),
-//     );
-
-//     Overlay.of(context).insert(_likeAnimationOverlay!);
-//     _animationController.forward();
-//   }
-
-//   void _removeLikeAnimation() {
-//     _likeAnimationOverlay?.remove();
-//     _likeAnimationOverlay = null;
-//     _animationController.reset();
-//   }
-
-//   String _formatCount(int count) {
-//     if (count < 1000) return count.toString();
-//     if (count < 1000000) return '${(count / 1000).toStringAsFixed(1)}K';
-//     return '${(count / 1000000).toStringAsFixed(1)}M';
-//   }
-
-//   Widget _buildProfile(String userId, int index) {
-//     return StreamBuilder<DocumentSnapshot>(
-//       stream: FirebaseFirestore.instance
-//           .collection('users')
-//           .doc(userId)
-//           .snapshots(),
-//       builder: (context, snapshot) {
-//         String profilePhoto = '';
-//         if (snapshot.hasData && snapshot.data!.exists) {
-//           final userData = snapshot.data!.data() as Map<String, dynamic>;
-//           profilePhoto = userData['image'] ?? '';
-//         }
-
-//         return GestureDetector(
-//           onTap: () {
-//             if (!_isVideoPaused) {
-//               setState(() => _isVideoPaused = true);
-//             }
-//             if (userId == authUserId) {
-//               widget.onProfileTab?.call();
-//             } else {
-//               Get.to(
-//                 () => ProfileScreen(userId: userId, isCurrentUser: false),
-//               )?.then((_) {
-//                 if (mounted) {
-//                   setState(() => _isVideoPaused = false);
-//                 }
-//               });
-//             }
-//           },
-
-//           child: Container(
-//             width: 33,
-//             height: 33,
-//             decoration: BoxDecoration(
-//               border: Border.all(color: Colors.white, width: 2),
-//               shape: BoxShape.circle,
-//             ),
-//             child: ClipOval(
-//               child: profilePhoto.isNotEmpty
-//                   ? Image.network(
-//                       profilePhoto,
-//                       fit: BoxFit.cover,
-//                       loadingBuilder: (context, child, loadingProgress) {
-//                         if (loadingProgress == null) return child;
-//                         return const Icon(Icons.person, color: Colors.white);
-//                       },
-//                       errorBuilder: (context, error, stackTrace) =>
-//                           const Icon(Icons.person, color: Colors.white),
-//                     )
-//                   : const Icon(Icons.person, color: Colors.white),
-//             ),
-//           ),
-//         );
-//       },
-//     );
-//   }
-
-//   Widget _buildMusicAlbum(String? profilePhoto, int index) {
-//     return Container(
-//       width: 50,
-//       height: 50,
-//       decoration: BoxDecoration(
-//         gradient: const LinearGradient(colors: [Colors.purple, Colors.pink]),
-//         borderRadius: BorderRadius.circular(25),
-//       ),
-//       child: ClipRRect(
-//         borderRadius: BorderRadius.circular(25),
-//         child: profilePhoto != null && profilePhoto.startsWith('http')
-//             ? Image.network(
-//                 profilePhoto,
-//                 fit: BoxFit.cover,
-//                 loadingBuilder: (context, child, loadingProgress) {
-//                   if (loadingProgress == null) return child;
-//                   return const Icon(Icons.music_note, color: Colors.white);
-//                 },
-//                 errorBuilder: (context, error, stackTrace) =>
-//                     const Icon(Icons.music_note, color: Colors.white),
-//               )
-//             : const Icon(Icons.music_note, color: Colors.white),
-//       ),
-//     );
-//   }
-
-//   // 🎯 TikTok-style Action Buttons with Ionicons
-//   Widget _buildActionButton({
-//     required IconData icon,
-//     required String count,
-//     required Color color,
-//     required VoidCallback onTap,
-//   }) {
-//     return GestureDetector(
-//       onTap: onTap,
-//       child: Column(
-//         children: [
-//           Container(
-//             decoration: BoxDecoration(
-//               color: Colors.black.withOpacity(0.3),
-//               borderRadius: BorderRadius.circular(25),
-//               boxShadow: [
-//                 BoxShadow(
-//                   color: Colors.black.withOpacity(0.4),
-//                   blurRadius: 5,
-//                   offset: const Offset(0, 2),
-//                 ),
-//               ],
-//             ),
-//             padding: const EdgeInsets.all(8),
-//             child: Icon(icon, size: 28, color: color),
-//           ),
-//           const SizedBox(height: 4),
-//           Text(
-//             count,
-//             style: const TextStyle(
-//               fontSize: 12,
-//               color: Colors.white,
-//               fontWeight: FontWeight.bold,
-//             ),
-//           ),
-//         ],
-//       ),
-//     );
-//   }
-
-//   void _shareVideo(
-//     String videoUrl,
-//     String description,
-//     String videoId,
-//     String ownerId,
-//   ) async {
-//     try {
-//       await Share.share(
-//         'Check out this video: $videoUrl\n$description',
-//         subject: 'TikTok Video',
-//       );
-//       shareVideoAndTrack(videoId, ownerId);
-//     } catch (e) {
-//       debugPrint('Share error: $e');
-//     }
-//   }
-
-//   // 🎯 Top Bar with Center Tabs and Right Notification
-
-//   // Widget _buildFollowButton(String userId) {
-//   //   // Hide the button if it's the current user's own profile
-//   //   if (userId == authUserId) return const SizedBox.shrink();
-
-//   //   return FutureBuilder<bool>(
-//   //     future: _followService.isFollowing(userId),
-//   //     builder: (context, snapshot) {
-//   //       final bool isFollowing = snapshot.data ?? false;
-//   //       final bool isInitialLoading =
-//   //           snapshot.connectionState == ConnectionState.waiting;
-
-//   //       return StatefulBuilder(
-//   //         builder: (context, setInnerState) {
-//   //           bool isLoading = false;
-
-//   //           Future<void> handleFollowAction() async {
-//   //             setInnerState(() => isLoading = true);
-//   //             try {
-//   //               if (isFollowing) {
-//   //                 await _followService.unfollowUser(userId);
-//   //               } else {
-//   //                 await _followService.followUser(userId);
-//   //               }
-//   //             } finally {
-//   //               setInnerState(() => isLoading = false);
-//   //               if (mounted) setState(() {});
-//   //             }
-//   //           }
-
-//   //           return AnimatedSwitcher(
-//   //             duration: const Duration(milliseconds: 250),
-//   //             transitionBuilder: (child, anim) =>
-//   //                 ScaleTransition(scale: anim, child: child),
-//   //             child: InkWell(
-//   //               key: ValueKey(isFollowing),
-//   //               borderRadius: BorderRadius.circular(55),
-//   //               onTap: (isInitialLoading || isLoading)
-//   //                   ? null
-//   //                   : handleFollowAction,
-//   //               child: AnimatedContainer(
-//   //                 duration: const Duration(milliseconds: 250),
-//   //                 curve: Curves.easeInOut,
-//   //                 padding: const EdgeInsets.symmetric(
-//   //                   horizontal: 14,
-//   //                   vertical: 6,
-//   //                 ),
-//   //                 decoration: BoxDecoration(
-//   //                   borderRadius: BorderRadius.circular(8),
-//   //                   border: Border.all(
-//   //                     color: isFollowing
-//   //                         ? Colors.white.withOpacity(0.7)
-//   //                         : Colors.transparent,
-//   //                     width: 1.2,
-//   //                   ),
-//   //                   gradient: isFollowing
-//   //                       ? null
-//   //                       : const LinearGradient(
-//   //                           colors: [
-//   //                             Color(0xFFFF0069), // Instagram pink/red
-//   //                             Color(0xFFFFF600), // Instagram yellow
-//   //                           ],
-//   //                           begin: Alignment.topLeft,
-//   //                           end: Alignment.bottomRight,
-//   //                         ),
-//   //                   color: isFollowing ? Colors.white.withOpacity(0.12) : null,
-//   //                   boxShadow: [
-//   //                     if (!isFollowing)
-//   //                       BoxShadow(
-//   //                         color: Colors.black.withOpacity(0.3),
-//   //                         offset: const Offset(0, 2),
-//   //                         blurRadius: 4,
-//   //                       ),
-//   //                   ],
-//   //                 ),
-//   //                 child: isInitialLoading || isLoading
-//   //                     ? const SizedBox(
-//   //                         width: 12,
-//   //                         height: 12,
-//   //                         // child: CircularProgressIndicator(
-//   //                         //   strokeWidth: 2,
-//   //                         //   valueColor: AlwaysStoppedAnimation<Color>(
-//   //                         //     Colors.white,
-//   //                         //   ),
-//   //                         // ),
-//   //                       )
-//   //                     : Text(
-//   //                         isFollowing ? 'Following' : 'Follow',
-//   //                         style: TextStyle(
-//   //                           color: isFollowing ? Colors.white : Colors.black,
-//   //                           fontWeight: FontWeight.bold,
-//   //                           fontSize: 14,
-//   //                         ),
-//   //                       ),
-//   //               ),
-//   //             ),
-//   //           );
-//   //         },
-//   //       );
-//   //     },
-//   //   );
-//   // }
-
-//   Widget _buildFollowButton(String userId) {
-//     if (userId == authUserId) return const SizedBox.shrink();
-
-//     return FutureBuilder<bool>(
-//       future: _followService.isFollowing(userId),
-//       builder: (context, snapshot) {
-//         bool isFollowing = snapshot.data ?? false;
-//         bool isInitialLoading =
-//             snapshot.connectionState == ConnectionState.waiting;
-
-//         return StatefulBuilder(
-//           builder: (context, setInnerState) {
-//             bool isLoading = false;
-
-//             Future<void> handleFollowAction() async {
-//               //  Instant UI update first
-//               setInnerState(() {
-//                 isFollowing = !isFollowing;
-//               });
-
-//               try {
-//                 if (isFollowing) {
-//                   await _followService.followUser(userId);
-//                 } else {
-//                   await _followService.unfollowUser(userId);
-//                 }
-//               } catch (e) {
-//                 //  Revert if Firestore fails
-//                 setInnerState(() {
-//                   isFollowing = !isFollowing;
-//                 });
-//               }
-//             }
-
-//             return AnimatedSwitcher(
-//               duration: const Duration(milliseconds: 200),
-//               transitionBuilder: (child, anim) =>
-//                   ScaleTransition(scale: anim, child: child),
-//               child: InkWell(
-//                 key: ValueKey(isFollowing),
-//                 borderRadius: BorderRadius.circular(55),
-//                 onTap: (isInitialLoading || isLoading)
-//                     ? null
-//                     : handleFollowAction,
-//                 child: AnimatedContainer(
-//                   duration: const Duration(milliseconds: 200),
-//                   curve: Curves.easeInOut,
-//                   padding: const EdgeInsets.symmetric(
-//                     horizontal: 14,
-//                     vertical: 6,
-//                   ),
-//                   decoration: BoxDecoration(
-//                     borderRadius: BorderRadius.circular(8),
-//                     border: Border.all(
-//                       color: isFollowing
-//                           ? Colors.white.withOpacity(0.7)
-//                           : Colors.transparent,
-//                       width: 1.2,
-//                     ),
-//                     gradient: isFollowing
-//                         ? null
-//                         : const LinearGradient(
-//                             colors: [Color(0xFFFF0069), Color(0xFFFFF600)],
-//                             begin: Alignment.topLeft,
-//                             end: Alignment.bottomRight,
-//                           ),
-//                     color: isFollowing ? Colors.white.withOpacity(0.12) : null,
-//                   ),
-//                   child: Text(
-//                     isFollowing ? 'Following' : 'Follow',
-//                     style: TextStyle(
-//                       color: isFollowing ? Colors.white : Colors.black,
-//                       fontWeight: FontWeight.bold,
-//                       fontSize: 14,
-//                     ),
-//                   ),
-//                 ),
-//               ),
-//             );
-//           },
-//         );
-//       },
-//     );
-//   }
-
-//   Widget _buildVideoOverlay(data, Size size, int index) {
-//     final isLiked = data.likesList!.contains(authUserId);
-
-//     return Column(
-//       children: [
-//         Expanded(
-//           child: Row(
-//             crossAxisAlignment: CrossAxisAlignment.end,
-//             children: [
-//               Expanded(
-//                 child: Container(
-//                   padding: const EdgeInsets.only(left: 10, bottom: 30),
-//                   child: Column(
-//                     mainAxisSize: MainAxisSize.min,
-//                     crossAxisAlignment: CrossAxisAlignment.start,
-
-//                     children: [
-//                       Row(
-//                         crossAxisAlignment: CrossAxisAlignment.center,
-//                         children: [
-//                           //  Profile picture
-//                           _buildProfile(data.userId!, index),
-//                           const SizedBox(width: 5),
-
-//                           //  Username expands flexibly but doesn't push the button off-screen
-//                           Flexible(
-//                             flex: 3,
-//                             child: GestureDetector(
-//                               onTap: () {
-//                                 if (!_isVideoPaused) {
-//                                   setState(() => _isVideoPaused = true);
-//                                 }
-//                                 if (data.userId == authUserId) {
-//                                   widget.onProfileTab?.call();
-//                                 } else {
-//                                   Get.to(
-//                                     () => ProfileScreen(
-//                                       userId: data.userId,
-//                                       isCurrentUser: false,
-//                                     ),
-//                                   )?.then((_) {
-//                                     if (mounted) {
-//                                       setState(() => _isVideoPaused = false);
-//                                     }
-//                                   });
-//                                 }
-//                               },
-//                               child:
-//                                   StreamBuilder<
-//                                     DocumentSnapshot<Map<String, dynamic>>
-//                                   >(
-//                                     stream: FirebaseFirestore.instance
-//                                         .collection('users')
-//                                         .doc(data.userId)
-//                                         .snapshots(),
-//                                     builder: (context, snapshot) {
-//                                       if (!snapshot.hasData ||
-//                                           snapshot.data == null ||
-//                                           !snapshot.data!.exists) {
-//                                         return const Text(
-//                                           '@UnknownUser',
-//                                           style: TextStyle(
-//                                             fontSize: 15,
-//                                             color: Colors.white,
-//                                             fontWeight: FontWeight.bold,
-//                                           ),
-//                                           overflow: TextOverflow.ellipsis,
-//                                           maxLines: 1,
-//                                         );
-//                                       }
-
-//                                       final userData = snapshot.data!.data()!;
-//                                       final userName =
-//                                           userData['name'] ?? 'Unknown User';
-
-//                                       return Text(
-//                                         '@$userName',
-//                                         style: const TextStyle(
-//                                           fontSize: 15,
-//                                           color: Colors.white,
-//                                           fontWeight: FontWeight.bold,
-//                                         ),
-//                                         overflow: TextOverflow.ellipsis,
-//                                         maxLines: 1,
-//                                         softWrap: false,
-//                                       );
-//                                     },
-//                                   ),
-//                             ),
-//                           ),
-
-//                           const SizedBox(width: 15),
-
-//                           // 👇 Follow button adjusts flexibly and shrinks if space is tight
-//                           Flexible(
-//                             flex: 0,
-//                             fit: FlexFit.loose,
-//                             child: Align(
-//                               alignment: Alignment.centerRight,
-//                               child: ConstrainedBox(
-//                                 constraints: const BoxConstraints(
-//                                   minWidth: 50,
-//                                   maxWidth:
-//                                       100, // keeps it responsive on smaller screens
-//                                 ),
-//                                 child: _buildFollowButton(data.userId!),
-//                               ),
-//                             ),
-//                           ),
-//                         ],
-//                       ),
-
-//                       const SizedBox(height: 8),
-
-//                       _ExpandableDescription(text: data.descriptionTags ?? ""),
-
-//                       const SizedBox(height: 8),
-//                       Row(
-//                         children: [
-//                           const Icon(
-//                             Icons.music_note,
-//                             size: 16,
-//                             color: Colors.white,
-//                           ),
-//                           const SizedBox(width: 6),
-//                           Expanded(
-//                             child: Text(
-//                               data.artistSongName ?? 'Original sound',
-//                               style: const TextStyle(
-//                                 fontSize: 14,
-//                                 color: Colors.white,
-//                                 fontWeight: FontWeight.w500,
-//                               ),
-//                               overflow: TextOverflow.ellipsis,
-//                             ),
-//                           ),
-//                         ],
-//                       ),
-//                     ],
-//                   ),
-//                 ),
-//               ),
-
-//               // 🎯 Right Action Buttons Column with Ionicons
-//               Container(
-//                 width: 70,
-//                 margin: EdgeInsets.only(bottom: size.height / 15, right: 8),
-//                 child: Column(
-//                   mainAxisAlignment: MainAxisAlignment.end,
-//                   children: [
-//                     // Like Button with Ionicons
-//                     _buildActionButton(
-//                       icon: isLiked ? Ionicons.heart : Ionicons.heart_outline,
-//                       count: _formatCount(data.likesList!.length),
-//                       color: isLiked ? Colors.red : Colors.white,
-//                       onTap: () => videoController.likeVideo(
-//                         data.videoId,
-//                         data.userId,
-//                         data.userName,
-//                         data.thumbnailUrl,
-//                       ),
-//                     ),
-//                     const SizedBox(height: 16),
-
-//                     // Comment Button with Ionicons
-//                     _buildActionButton(
-//                       icon: Ionicons.chatbubble_ellipses_outline,
-//                       count: _formatCount(data.totalComments!),
-//                       color: Colors.white,
-
-//                       onTap: () {
-//                         if (data.userId == null) {
-//                           Get.snackbar('Error', 'Missing data for comments');
-//                           return;
-//                         }
-
-//                         if (!_isVideoPaused) {
-//                           setState(() => _isVideoPaused = true);
-//                         }
-
-//                         Get.to(
-//                           () => CommentsScreen(
-//                             videoId: "${data.videoId}",
-//                             videoOwnerId: "${data.userId}",
-//                           ),
-//                         )?.then((_) {
-//                           if (mounted) {
-//                             setState(() => _isVideoPaused = false);
-//                           }
-//                         });
-//                       },
-//                     ),
-//                     const SizedBox(height: 16),
-
-//                     // Share Button with Ionicons
-//                     _buildActionButton(
-//                       icon: Ionicons.paper_plane_outline,
-//                       count: _formatCount(data.totalShares!),
-//                       color: Colors.white,
-//                       onTap: () => _shareVideo(
-//                         data.videoUrl!,
-//                         data.descriptionTags ?? '',
-//                         data.videoId!,
-//                         data.userId!,
-//                       ),
-//                     ),
-//                     const SizedBox(height: 16),
-
-//                     // Views Counter with Ionicons
-//                     _buildActionButton(
-//                       icon: Ionicons.eye_outline,
-//                       count: _formatCount(data.views ?? 0),
-//                       color: Colors.white,
-//                       onTap: () {},
-//                     ),
-
-//                     const SizedBox(height: 16),
-
-//                     StreamBuilder<bool>(
-//                       stream: SavedVideoService().isVideoSaved(data.videoId!),
-//                       builder: (context, snapshot) {
-//                         final isSaved = snapshot.data ?? false;
-
-//                         return IconButton(
-//                           icon: Icon(
-//                             isSaved ? Icons.bookmark : Icons.bookmark_border,
-//                             color: isSaved
-//                                 ? const Color.fromARGB(255, 255, 255, 255)
-//                                 : Colors.white,
-//                             size: 28,
-//                           ),
-//                           onPressed: () async {
-//                             final service = SavedVideoService();
-//                             if (isSaved) {
-//                               // 👇 remove (unsave)
-//                               await service.unsaveVideo(data.videoId!);
-//                             } else {
-//                               // 👇 add (save)
-//                               await service.saveVideo(data.videoId!);
-//                             }
-//                           },
-//                         );
-//                       },
-//                     ),
-
-//                     const SizedBox(height: 16),
-
-//                     CircleAnimationProfile(
-//                       key: Key('circle_animation_$index'),
-//                       child: _buildMusicAlbum(
-//                         "${Icon(Icons.music_note)}",
-//                         index,
-//                       ),
-//                     ),
-//                   ],
-//                 ),
-//               ),
-//             ],
-//           ),
-//         ),
-//       ],
-//     );
-//   }
-
-//   @override
-//   Widget build(BuildContext context) {
-//     final size = MediaQuery.of(context).size;
-
-//     return Scaffold(
-//       backgroundColor: Colors.black,
-//       body: Obx(() {
-//         if (videoController.isLoading) {
-//           return const Center(
-//             child: CircularProgressIndicator(
-//               valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-//             ),
-//           );
-//         }
-
-//         if (videoController.errorMessage.isNotEmpty) {
-//           return Center(
-//             child: Column(
-//               mainAxisAlignment: MainAxisAlignment.center,
-//               children: [
-//                 const Icon(Icons.error_outline, color: Colors.white, size: 50),
-//                 const SizedBox(height: 16),
-//                 Text(
-//                   videoController.errorMessage,
-//                   style: const TextStyle(color: Colors.white, fontSize: 16),
-//                 ),
-//                 const SizedBox(height: 16),
-//                 ElevatedButton(
-//                   onPressed: () => videoController.isLoading,
-//                   style: ElevatedButton.styleFrom(
-//                     backgroundColor: Colors.white,
-//                     foregroundColor: Colors.black,
-//                   ),
-//                   child: const Text('Retry'),
-//                 ),
-//               ],
-//             ),
-//           );
-//         }
-
-//         if (videoController.videoList.isEmpty) {
-//           return const Center(
-//             child: Text(
-//               'No videos available',
-//               style: TextStyle(color: Colors.white, fontSize: 18),
-//             ),
-//           );
-//         }
-
-//         if (_displayedVideoIndices.isEmpty && _isInitialLoad) {
-//           WidgetsBinding.instance.addPostFrameCallback((_) {
-//             if (mounted) {
-//               setState(() {
-//                 _loadInitialVideos();
-//                 _isInitialLoad = false;
-//               });
-//             }
-//           });
-
-//           return const Center(
-//             child: CircularProgressIndicator(
-//               valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-//             ),
-//           );
-//         }
-
-//         return GestureDetector(
-//           onTap: _togglePlayPause, // Single tap to play/pause
-//           onDoubleTap: () {
-//             if (_displayedVideoIndices.isNotEmpty) {
-//               final currentIndex = _displayedVideoIndices[_currentPage];
-//               final data = videoController.videoList[currentIndex];
-//               videoController.likeVideo(
-//                 data.videoId!,
-//                 data.userId!,
-//                 data.userName!,
-//                 data.thumbnailUrl!,
-//               );
-//               _showLikeAnimation();
-//             }
-//           },
-
-//           // onLongPressStart: (_) => setState(() => _isLongPressing = true),
-//           // onLongPressEnd: (_) => setState(() => _isLongPressing = false),
-//           child: Stack(
-//             children: [
-//               // PageView.builder(
-//               //   controller: _pageController,
-//               //   itemCount: _displayedVideoIndices.length,
-//               //   scrollDirection: Axis.vertical,
-//               //   physics: const CustomScrollPhysics(),
-//               //   onPageChanged: _onPageChanged,
-//               //   itemBuilder: (context, index) {
-//               //     if (index >= _displayedVideoIndices.length) {
-//               //       return Container(
-//               //         color: Colors.black,
-//               //         child: const Center(
-//               //           child: CircularProgressIndicator(
-//               //             valueColor: AlwaysStoppedAnimation<Color>(
-//               //               Colors.white,
-//               //             ),
-//               //           ),
-//               //         ),
-//               //       );
-//               //     }
-
-//               //     final videoIndex = _displayedVideoIndices[index];
-//               //     final data = videoController.videoList[videoIndex];
-
-//               //     if (data.videoUrl == null || data.videoUrl!.isEmpty) {
-//               //       return Container(
-//               //         color: Colors.black,
-//               //         child: const Center(
-//               //           child: Text(
-//               //             'Video not available',
-//               //             style: TextStyle(color: Colors.white),
-//               //           ),
-//               //         ),
-//               //       );
-//               //     }
-
-//               //     return Stack(
-//               //       children: [
-//               //         // VideoPalyerItem(
-//               //         //   videoUrl: "${data.videoUrl}",
-//               //         //   isPlaying:
-//               //         //       index == _currentPage &&
-//               //         //       !_isLongPressing &&
-//               //         //       !_isVideoPaused,
-//               //         //   key: Key('video_player_${data.videoId}_$index'),
-//               //         //   onControllerReady: (controller) {},
-//               //         //   onControllerDispose: (controller) {},
-//               //         // ),
-//               //         VideoPlayerItem(
-//               //           videoUrl: data.videoUrl!,
-//               //           isPlaying: index == _currentPage && !_isVideoPaused,
-//               //           key: Key('video_player_${data.videoId}_$index'),
-//               //           onControllerReady: (controller) {
-//               //             if (!_videoControllers.contains(controller)) {
-//               //               _videoControllers.add(controller);
-//               //             }
-//               //           },
-//               //           onControllerDispose: (controller) {
-//               //             _videoControllers.remove(controller);
-//               //           },
-//               //         ),
-
-//               //         _buildVideoOverlay(data, size, index),
-//               //       ],
-//               //     );
-//               //   },
-//               // ),
-//               NotificationListener<ScrollNotification>(
-//                 onNotification: (scrollNotification) {
-//                   if (scrollNotification is UserScrollNotification) {
-//                     if (scrollNotification.direction ==
-//                         ScrollDirection.reverse) {
-//                       // Scrolling up — hide
-//                       showTopBarNotifier.value = false;
-//                     } else if (scrollNotification.direction ==
-//                         ScrollDirection.forward) {
-//                       // Scrolling down — show
-//                       showTopBarNotifier.value = true;
-//                     }
-//                   }
-//                   return true;
-//                 },
-//                 child: PageView.builder(
-//                   controller: _pageController,
-//                   itemCount: _displayedVideoIndices.length,
-//                   scrollDirection: Axis.vertical,
-//                   physics: const CustomScrollPhysics(),
-
-//                   onPageChanged: _onPageChanged,
-//                   itemBuilder: (context, index) {
-//                     final videoIndex = _displayedVideoIndices[index];
-//                     final data = videoController.videoList[videoIndex];
-
-//                     return Stack(
-//                       children: [
-//                         VideoPlayerItem(
-//                           videoUrl: data.videoUrl!,
-//                           isPlaying: index == _currentPage && !_isVideoPaused,
-//                           key: Key('video_player_${data.videoId}_$index'),
-//                           onControllerReady: (controller) {
-//                             if (!_videoControllers.contains(controller)) {
-//                               _videoControllers.add(controller);
-//                             }
-//                           },
-//                           onControllerDispose: (controller) {
-//                             _videoControllers.remove(controller);
-//                           },
-//                         ),
-
-//                         _buildVideoOverlay(data, size, index),
-//                       ],
-//                     );
-//                   },
-//                 ),
-//               ),
-//             ],
-//           ),
-//         );
-//       }),
-//     );
-//   }
-// }
-
-// class _ExpandableDescription extends StatefulWidget {
-//   final String text;
-//   const _ExpandableDescription({required this.text});
-//   @override
-//   State<_ExpandableDescription> createState() => _ExpandableDescriptionState();
-// }
-
-// class _ExpandableDescriptionState extends State<_ExpandableDescription> {
-//   bool _isExpanded = false;
-
-//   @override
-//   Widget build(BuildContext context) {
-//     const textStyle = TextStyle(fontSize: 14, color: Colors.white);
-
-//     return LayoutBuilder(
-//       builder: (context, constraints) {
-//         final span = TextSpan(text: widget.text, style: textStyle);
-//         final tp = TextPainter(
-//           text: span,
-//           maxLines: 3,
-//           textDirection: TextDirection.ltr,
-//         )..layout(maxWidth: constraints.maxWidth);
-//         final isOverflowing = tp.didExceedMaxLines;
-
-//         return Column(
-//           crossAxisAlignment: CrossAxisAlignment.start,
-//           children: [
-//             AnimatedSize(
-//               duration: const Duration(milliseconds: 200),
-//               curve: Curves.easeInOut,
-//               child: Text(
-//                 widget.text,
-//                 style: textStyle,
-//                 maxLines: _isExpanded ? null : 3,
-//                 overflow: _isExpanded
-//                     ? TextOverflow.visible
-//                     : TextOverflow.ellipsis,
-//                 softWrap: true,
-//               ),
-//             ),
-//             if (isOverflowing)
-//               GestureDetector(
-//                 onTap: () => setState(() => _isExpanded = !_isExpanded),
-//                 child: Padding(
-//                   padding: const EdgeInsets.only(top: 4),
-//                   child: Text(
-//                     _isExpanded ? 'Show less' : 'More',
-//                     style: const TextStyle(
-//                       color: Colors.white70,
-//                       fontWeight: FontWeight.bold,
-//                     ),
-//                   ),
-//                 ),
-//               ),
-//           ],
-//         );
-//       },
-//     );
-//   }
-// }
-
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -1075,13 +8,13 @@ import 'package:tiktok/authentication/authentication_controller.dart';
 import 'package:tiktok/comments/comments_screen.dart';
 import 'package:tiktok/follow_service/follow_service.dart';
 import 'package:tiktok/for_you/custom_scroll_physics.dart';
+import 'package:tiktok/for_you/internal_share_sheet.dart';
 import 'package:tiktok/for_you/like_animation.dart';
 import 'package:tiktok/for_you/save_videos/saved_video_controller.dart';
 import 'package:tiktok/profile/profile_screen.dart';
-import 'package:tiktok/share_vieos/share_videos.models.dart';
 import 'package:tiktok/upload_videos/get_video_url_controller.dart';
 import 'package:tiktok/widgets/circle_animation_profile.dart';
-import 'package:share_plus/share_plus.dart';
+
 import 'dart:math';
 import 'package:video_player/video_player.dart';
 
@@ -1419,7 +352,7 @@ class VideoScreenState extends State<ForYouVideoScreen>
       ),
     );
 
-    Overlay.of(context)?.insert(_likeAnimationOverlay!);
+    Overlay.of(context).insert(_likeAnimationOverlay!);
     _animationController.forward();
   }
 
@@ -1541,13 +474,7 @@ class VideoScreenState extends State<ForYouVideoScreen>
             decoration: BoxDecoration(
               color: Colors.black.withOpacity(0.3),
               borderRadius: BorderRadius.circular(25),
-              boxShadow: [
-                // BoxShadow(
-                //   color: Colors.black.withOpacity(0.4),
-                //   blurRadius: 5,
-                //   offset: const Offset(0, 2),
-                // ),
-              ],
+              boxShadow: [],
             ),
             padding: const EdgeInsets.all(8),
             child: Icon(icon, size: 24, color: color),
@@ -1566,21 +493,65 @@ class VideoScreenState extends State<ForYouVideoScreen>
     );
   }
 
-  void _shareVideo(
+  // void _shareVideo(
+  //   String videoUrl,
+  //   String description,
+  //   String videoId,
+  //   String ownerId,
+  // ) async {
+  //   try {
+  //     await Share.share(
+  //       'Check out this video: $videoUrl\n$description',
+  //       subject: 'TikTok Video',
+  //     );
+  //     shareVideoAndTrack(videoId, ownerId);
+  //   } catch (e) {
+  //     debugPrint('Share error: $e');
+  //   }
+  // }
+
+  void _showInternalShareSheet(
     String videoUrl,
     String description,
     String videoId,
+    String thumbnailUrl,
     String ownerId,
+    String ownerName,
   ) async {
-    try {
-      await Share.share(
-        'Check out this video: $videoUrl\n$description',
-        subject: 'TikTok Video',
-      );
-      shareVideoAndTrack(videoId, ownerId);
-    } catch (e) {
-      debugPrint('Share error: $e');
-    }
+    final currentUser = AuthenticationController.instanceAuth.user;
+    final currentUserId = currentUser.uid;
+    final currentUserDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(currentUserId)
+        .get();
+    final currentUserData = currentUserDoc.data() as Map<String, dynamic>;
+
+    showModalBottomSheet(
+      // ignore: use_build_context_synchronously
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.9,
+        maxChildSize: 0.95,
+        minChildSize: 0.6,
+        builder: (_, controller) => Container(
+          decoration: const BoxDecoration(
+            color: Colors.black,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: InternalShareSheet(
+            videoId: videoId,
+            videoUrl: videoUrl,
+            thumbnailUrl: thumbnailUrl,
+            description: description,
+            senderId: currentUserId,
+            senderName: currentUserData['name'] ?? 'User',
+            senderImage: currentUserData['image'] ?? '',
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildFollowButton(String userId) {
@@ -1843,16 +814,83 @@ class VideoScreenState extends State<ForYouVideoScreen>
                       },
                     ),
                     const SizedBox(height: 5),
+
                     _buildActionButton(
                       icon: Ionicons.paper_plane_outline,
                       count: _formatCount(data.totalShares!),
                       color: Colors.white,
-                      onTap: () => _shareVideo(
-                        data.videoUrl!,
-                        data.descriptionTags ?? '',
-                        data.videoId!,
-                        data.userId!,
-                      ),
+
+                      // onTap: () => _shareVideo(
+                      //   data.videoUrl!,
+                      //   data.descriptionTags ?? '',
+                      //   data.videoId!,
+                      //   data.userId!,
+                      // ),
+                      // onTap: () {
+                      //   // Pause video when opening share sheet
+                      //   // if (!_isVideoPaused) {
+                      //   //   setState(() => _isVideoPaused = true);
+                      //   //   _applyPlayPauseToControllers();
+                      //   // }
+
+                      //   _showInternalShareSheet(
+                      //     data.videoUrl!,
+                      //     data.descriptionTags ?? '',
+                      //     data.videoId!,
+                      //     data.thumbnailUrl ?? '',
+                      //     data.userId!,
+                      //     data.userName ?? 'User',
+                      //   );
+                      // },
+                      onTap: () async {
+                        // Step 1: Pause the video immediately when share is tapped
+                        final bool wasPlaying =
+                            !_isVideoPaused; // Remember if it was playing
+                        if (wasPlaying) {
+                          setState(() => _isVideoPaused = true);
+                          _applyPlayPauseToControllers();
+                          debugPrint(
+                            "$_isVideoPaused videos pause--------------------------------------",
+                          );
+                        }
+
+                        final currentUser =
+                            AuthenticationController.instanceAuth.user;
+                        final currentUserId = currentUser.uid;
+                        final currentUserDoc = await FirebaseFirestore.instance
+                            .collection('users')
+                            .doc(currentUserId)
+                            .get();
+                        final currentUserData =
+                            currentUserDoc.data() as Map<String, dynamic>;
+
+                        // Step 2: Show the share sheet and wait for it to close
+                        final bool? shareCompleted =
+                            await showModalBottomSheet<bool>(
+                              // ignore: use_build_context_synchronously
+                              context: context,
+                              isScrollControlled: true,
+                              backgroundColor: Colors.transparent,
+                              builder: (context) => InternalShareSheet(
+                                videoId: data.videoId!,
+                                videoUrl: data.videoUrl!,
+                                thumbnailUrl: data.thumbnailUrl ?? '',
+                                description: data.descriptionTags ?? '',
+                                senderId: currentUserId,
+                                senderName: currentUserData['name'] ?? 'User',
+                                senderImage: currentUserData['image'] ?? '',
+                              ),
+                            );
+
+                        // Step 3: When share sheet is closed, resume video if it was playing before
+                        if (wasPlaying && mounted) {
+                          setState(() => _isVideoPaused = false);
+                          _applyPlayPauseToControllers();
+                          debugPrint(
+                            "$_isVideoPaused videos resume--------------------------------------",
+                          );
+                        }
+                      },
                     ),
                     const SizedBox(height: 5),
                     _buildActionButton(
@@ -1974,21 +1012,6 @@ class VideoScreenState extends State<ForYouVideoScreen>
 
         // overlay UI
         _buildVideoOverlay(data, MediaQuery.of(context).size, pageIndex),
-
-        // small play/pause indicator in center when paused
-        // ValueListenableBuilder<int>(
-        //   valueListenable: _currentPageNotifier,
-        //   builder: (context, current, _) {
-        //     final show =
-        //         current == pageIndex &&
-        //         (_isVideoPaused ||
-        //             !(isInitialized && controller?.value.isPlaying == true));
-        //     if (!show) return const SizedBox.shrink();
-        //     return const Center(
-        //       child: Icon(Icons.play_arrow, size: 80, color: Colors.white54),
-        //     );
-        //   },
-        // ),
       ],
     );
   }
@@ -2014,6 +1037,7 @@ class VideoScreenState extends State<ForYouVideoScreen>
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const Icon(Icons.error_outline, color: Colors.white, size: 50),
+
                 const SizedBox(height: 16),
                 Text(
                   videoController.errorMessage,
@@ -2168,3 +1192,746 @@ class _ExpandableDescriptionState extends State<_ExpandableDescription> {
     );
   }
 }
+
+// class InternalShareSheet extends StatefulWidget {
+//   final String videoId;
+//   final String videoUrl;
+//   final String thumbnailUrl;
+//   final String description;
+//   final String senderId;
+//   final String senderName;
+//   final String senderImage;
+
+//   InternalShareSheet({
+//     required this.videoId,
+//     required this.videoUrl,
+//     required this.thumbnailUrl,
+//     required this.description,
+//     required this.senderId,
+//     required this.senderName,
+//     required this.senderImage,
+//   });
+
+//   @override
+//   _InternalShareSheetState createState() => _InternalShareSheetState();
+// }
+
+// class _InternalShareSheetState extends State<InternalShareSheet> {
+//   final TextEditingController _searchController = TextEditingController();
+//   List<String> selectedUserIds = [];
+//   List<DocumentSnapshot> allFollowers = [];
+//   List<DocumentSnapshot> filteredUsers = [];
+//   bool isLoading = true;
+
+//   @override
+//   void initState() {
+//     super.initState();
+//     _loadFollowers();
+//     _searchController.addListener(() {
+//       filterUsers();
+//     });
+//   }
+
+//   Future<void> _loadFollowers() async {
+//     final followersSnapshot = await FirebaseFirestore.instance
+//         .collection('users')
+//         .doc(widget.senderId)
+//         .collection('followers')
+//         .get();
+
+//     List<String> followerIds = followersSnapshot.docs.map((e) => e.id).toList();
+
+//     if (followerIds.isEmpty) {
+//       setState(() => isLoading = false);
+//       return;
+//     }
+
+//     final usersSnapshot = await FirebaseFirestore.instance
+//         .collection('users')
+//         .where(FieldPath.documentId, whereIn: followerIds)
+//         .get();
+
+//     setState(() {
+//       allFollowers = usersSnapshot.docs;
+//       filteredUsers = usersSnapshot.docs;
+//       isLoading = false;
+//     });
+//   }
+
+//   void filterUsers() {
+//     final query = _searchController.text.toLowerCase();
+//     setState(() {
+//       filteredUsers = allFollowers.where((userDoc) {
+//         final data = userDoc.data() as Map<String, dynamic>;
+//         final name = (data['name'] ?? '').toLowerCase();
+//         final username = (data['username'] ?? '').toLowerCase();
+//         return name.contains(query) || username.contains(query);
+//       }).toList();
+//     });
+//   }
+
+//   Future<void> _shareToSocial(String type) async {
+//     String textToShare = "${widget.description}\n${widget.videoUrl}";
+
+//     if (type == "whatsapp") {
+//       Share.share(textToShare);
+//     } else if (type == "instagram") {
+//       Share.share(textToShare);
+//     } else if (type == "facebook") {
+//       Share.share(textToShare);
+//     } else if (type == "telegram") {
+//       Share.share(textToShare);
+//     } else {
+//       Share.share(textToShare);
+//     }
+
+//     await shareVideoAndTrack(widget.videoId, widget.senderId);
+//     Get.snackbar(
+//       "Shared",
+//       "Shared to $type",
+//       backgroundColor: Colors.green,
+//       colorText: Colors.white,
+//     );
+//   }
+
+//   Widget _socialIcon({
+//     required IconData icon,
+//     required String label,
+//     required Function onTap,
+//   }) {
+//     return InkWell(
+//       onTap: () => onTap(),
+//       child: Column(
+//         children: [
+//           CircleAvatar(
+//             radius: 22,
+//             backgroundColor: Colors.grey[800],
+//             child: Icon(icon, color: Colors.white),
+//           ),
+//           SizedBox(height: 5),
+//           Text(label, style: TextStyle(color: Colors.white, fontSize: 12)),
+//         ],
+//       ),
+//     );
+//   }
+
+//   @override
+//   Widget build(BuildContext context) {
+//     return Column(
+//       children: [
+//         // Social Media Share Row
+//         Padding(
+//           padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+//           child: Row(
+//             mainAxisAlignment: MainAxisAlignment.spaceAround,
+//             children: [
+//               _socialIcon(
+//                 icon: Icons.share,
+//                 label: "Share",
+//                 onTap: () => _shareToSocial("whatsapp"),
+//               ),
+//             ],
+//           ),
+//         ),
+
+//         // Header
+//         Container(
+//           padding: EdgeInsets.all(16),
+//           decoration: BoxDecoration(
+//             color: Colors.grey[900],
+//             borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+//           ),
+//           child: Row(
+//             children: [
+//               IconButton(
+//                 icon: Icon(Icons.close, color: Colors.white),
+//                 onPressed: () => Navigator.pop(context),
+//               ),
+//               Expanded(
+//                 child: Center(
+//                   child: Text(
+//                     "Share Video",
+//                     style: TextStyle(
+//                       color: Colors.white,
+//                       fontSize: 18,
+//                       fontWeight: FontWeight.bold,
+//                     ),
+//                   ),
+//                 ),
+//               ),
+//               TextButton(
+//                 onPressed: selectedUserIds.isEmpty
+//                     ? null
+//                     : () async {
+//                         await ShareService().shareVideoToUsers(
+//                           videoId: widget.videoId,
+//                           videoUrl: widget.videoUrl,
+//                           thumbnailUrl: widget.thumbnailUrl,
+//                           description: widget.description,
+//                           senderId: widget.senderId,
+//                           senderName: widget.senderName,
+//                           senderImage: widget.senderImage,
+//                           receiverIds: selectedUserIds,
+//                         );
+
+//                         await shareVideoAndTrack(
+//                           widget.videoId,
+//                           widget.senderId,
+//                         );
+
+//                         if (!mounted) return;
+
+//                         Get.snackbar(
+//                           "Sent",
+//                           "Video shared successfully!",
+//                           backgroundColor: Colors.green,
+//                           colorText: Colors.white,
+//                         );
+//                       },
+//                 child: Text(
+//                   "Send",
+//                   style: TextStyle(
+//                     color: selectedUserIds.isEmpty ? Colors.grey : Colors.blue,
+//                     fontWeight: FontWeight.bold,
+//                   ),
+//                 ),
+//               ),
+//             ],
+//           ),
+//         ),
+//         // Search Bar
+//         Padding(
+//           padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+//           child: TextField(
+//             controller: _searchController,
+//             style: TextStyle(color: Colors.white),
+//             decoration: InputDecoration(
+//               hintText: "Search followers...",
+//               hintStyle: TextStyle(color: Colors.grey),
+//               prefixIcon: Icon(Icons.search, color: Colors.grey),
+//               filled: true,
+//               fillColor: Colors.grey[850],
+//               border: OutlineInputBorder(
+//                 borderRadius: BorderRadius.circular(10),
+//                 borderSide: BorderSide.none,
+//               ),
+//             ),
+//           ),
+//         ),
+//         // Selected count
+//         if (selectedUserIds.isNotEmpty)
+//           Container(
+//             padding: EdgeInsets.all(12),
+//             color: Colors.blue.withOpacity(0.2),
+//             child: Center(
+//               child: Text(
+//                 "Selected: ${selectedUserIds.length} user${selectedUserIds.length > 1 ? 's' : ''}",
+//                 style: TextStyle(color: Colors.white),
+//               ),
+//             ),
+//           ),
+//         // Users List
+//         Expanded(
+//           child: isLoading
+//               ? Center(child: CircularProgressIndicator())
+//               : filteredUsers.isEmpty
+//               ? Center(
+//                   child: Text(
+//                     "No followers yet",
+//                     style: TextStyle(color: Colors.grey),
+//                   ),
+//                 )
+//               : ListView.builder(
+//                   itemCount: filteredUsers.length,
+//                   itemBuilder: (context, index) {
+//                     final userDoc = filteredUsers[index];
+//                     final data = userDoc.data() as Map<String, dynamic>;
+//                     final userId = userDoc.id;
+//                     final name = data['name'] ?? 'User';
+//                     final image = data['image'] ?? '';
+//                     final isSelected = selectedUserIds.contains(userId);
+
+//                     return ListTile(
+//                       leading: CircleAvatar(
+//                         backgroundImage: image.isNotEmpty
+//                             ? NetworkImage(image)
+//                             : null,
+//                         child: image.isEmpty ? Icon(Icons.person) : null,
+//                       ),
+//                       title: Text(name, style: TextStyle(color: Colors.white)),
+//                       trailing: Checkbox(
+//                         value: isSelected,
+//                         activeColor: Colors.blue,
+//                         onChanged: (val) {
+//                           setState(() {
+//                             if (val == true) {
+//                               selectedUserIds.add(userId);
+//                             } else {
+//                               selectedUserIds.remove(userId);
+//                             }
+//                           });
+//                         },
+//                       ),
+//                       onTap: () {
+//                         setState(() {
+//                           if (isSelected) {
+//                             selectedUserIds.remove(userId);
+//                           } else {
+//                             selectedUserIds.add(userId);
+//                           }
+//                         });
+//                       },
+//                     );
+//                   },
+//                 ),
+//         ),
+//       ],
+//     );
+//   }
+// }
+
+//Grok---------------------------------------------------------------------------------
+
+// class InternalShareSheet extends StatefulWidget {
+//   final String videoId;
+//   final String videoUrl;
+//   final String thumbnailUrl;
+//   final String description;
+//   final String senderId;
+//   final String senderName;
+//   final String senderImage;
+
+//   const InternalShareSheet({
+//     super.key,
+//     required this.videoId,
+//     required this.videoUrl,
+//     required this.thumbnailUrl,
+//     required this.description,
+//     required this.senderId,
+//     required this.senderName,
+//     required this.senderImage,
+//   });
+
+//   @override
+//   State<InternalShareSheet> createState() => _InternalShareSheetState();
+// }
+
+// class _InternalShareSheetState extends State<InternalShareSheet> {
+//   final TextEditingController _searchController = TextEditingController();
+//   final Set<String> _selectedUserIds =
+//       <String>{}; // Use Set for O(1) operations
+//   List<DocumentSnapshot> _allFollowers = [];
+//   List<DocumentSnapshot> _filteredUsers = [];
+//   bool _isLoading = true;
+//   Timer? _debounceTimer;
+
+//   @override
+//   void initState() {
+//     super.initState();
+//     _loadFollowers();
+//     _searchController.addListener(_onSearchChanged);
+//   }
+
+//   @override
+//   void dispose() {
+//     _searchController.removeListener(_onSearchChanged);
+//     _searchController.dispose();
+//     _debounceTimer?.cancel();
+//     super.dispose();
+//   }
+
+//   // Debounced search to improve performance
+//   void _onSearchChanged() {
+//     _debounceTimer?.cancel();
+//     _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+//       _filterUsers();
+//     });
+//   }
+
+//   Future<void> _loadFollowers() async {
+//     try {
+//       setState(() => _isLoading = true);
+
+//       final followersSnap = await FirebaseFirestore.instance
+//           .collection('users')
+//           .doc(widget.senderId)
+//           .collection('followers')
+//           .get();
+
+//       final followerIds = followersSnap.docs.map((e) => e.id).toList();
+//       if (followerIds.isEmpty) {
+//         if (mounted) {
+//           setState(() {
+//             _allFollowers = [];
+//             _filteredUsers = [];
+//             _isLoading = false;
+//           });
+//         }
+//         return;
+//       }
+
+//       // Batch queries if >10 IDs (Firestore whereIn limit)
+//       final List<DocumentSnapshot> users = [];
+//       for (int i = 0; i < followerIds.length; i += 10) {
+//         final batch = followerIds.sublist(
+//           i,
+//           i + 10 > followerIds.length ? followerIds.length : i + 10,
+//         );
+//         final batchSnap = await FirebaseFirestore.instance
+//             .collection('users')
+//             .where(FieldPath.documentId, whereIn: batch)
+//             .get();
+//         users.addAll(batchSnap.docs);
+//       }
+
+//       if (mounted) {
+//         setState(() {
+//           _allFollowers = users;
+//           _filteredUsers = users;
+//           _isLoading = false;
+//         });
+//       }
+//     } catch (e) {
+//       if (mounted) {
+//         Get.snackbar(
+//           "Error",
+//           "Failed to load followers",
+//           backgroundColor: Colors.red,
+//         );
+//         setState(() => _isLoading = false);
+//       }
+//     }
+//   }
+
+//   void _filterUsers() {
+//     final query = _searchController.text.toLowerCase().trim();
+//     if (query.isEmpty) {
+//       setState(() => _filteredUsers = _allFollowers);
+//       return;
+//     }
+
+//     setState(() {
+//       _filteredUsers = _allFollowers.where((doc) {
+//         final data = doc.data() as Map<String, dynamic>;
+//         final name = (data['name'] as String?)?.toLowerCase() ?? '';
+//         final username = (data['username'] as String?)?.toLowerCase() ?? '';
+//         return name.contains(query) || username.contains(query);
+//       }).toList();
+//     });
+//   }
+
+//   Future<void> _shareToSocial(String platform) async {
+//     final text = "${widget.description}\n${widget.videoUrl}";
+//     await Share.share(text, subject: 'Check out this video!');
+
+//     await shareVideoAndTrack(widget.videoId, widget.senderId);
+//     Get.snackbar(
+//       "Shared",
+//       "Shared to $platform",
+//       backgroundColor: Colors.green,
+//       colorText: Colors.white,
+//       snackPosition: SnackPosition.BOTTOM,
+//     );
+//   }
+
+//   Future<void> _sendToSelected() async {
+//     if (_selectedUserIds.isEmpty) return;
+
+//     Navigator.pop(context);
+
+//     await ShareService().shareVideoToUsers(
+//       videoId: widget.videoId,
+//       videoUrl: widget.videoUrl,
+//       thumbnailUrl: widget.thumbnailUrl,
+//       description: widget.description,
+//       senderId: widget.senderId,
+//       senderName: widget.senderName,
+//       senderImage: widget.senderImage,
+//       receiverIds: _selectedUserIds.toList(),
+//     );
+
+//     await shareVideoAndTrack(widget.videoId, widget.senderId);
+
+//     if (!mounted) return;
+
+//     // Navigator.pop(context);
+
+//     Get.snackbar(
+//       "Success",
+//       "Video sent to ${_selectedUserIds.length} user${_selectedUserIds.length > 1 ? 's' : ''}!",
+//       backgroundColor: Colors.green,
+//       colorText: Colors.white,
+//     );
+//   }
+
+//   @override
+//   Widget build(BuildContext context) {
+//     return Container(
+//       decoration: const BoxDecoration(
+//         color: Color(0xFF121212),
+//         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+//       ),
+//       child: Column(
+//         children: [
+//           // Drag handle + Header
+//           Column(
+//             children: [
+//               const SizedBox(height: 8),
+//               Container(
+//                 width: 40,
+//                 height: 4,
+//                 decoration: BoxDecoration(
+//                   color: Colors.grey[600],
+//                   borderRadius: BorderRadius.circular(2),
+//                 ),
+//               ),
+//               Padding(
+//                 padding: const EdgeInsets.all(16),
+//                 child: Row(
+//                   children: [
+//                     IconButton(
+//                       icon: const Icon(Icons.close, color: Colors.white),
+//                       onPressed: () => Navigator.pop(context),
+//                     ),
+//                     const Expanded(
+//                       child: Center(
+//                         child: Text(
+//                           "Share Video",
+//                           style: TextStyle(
+//                             color: Colors.white,
+//                             fontSize: 18,
+//                             fontWeight: FontWeight.bold,
+//                           ),
+//                         ),
+//                       ),
+//                     ),
+//                     TextButton(
+//                       onPressed: _selectedUserIds.isEmpty
+//                           ? null
+//                           : _sendToSelected,
+//                       child: Text(
+//                         "Send",
+//                         style: TextStyle(
+//                           color: _selectedUserIds.isEmpty
+//                               ? Colors.grey
+//                               : Colors.blueAccent,
+//                           fontWeight: FontWeight.bold,
+//                           fontSize: 16,
+//                         ),
+//                       ),
+//                     ),
+//                   ],
+//                 ),
+//               ),
+//             ],
+//           ),
+
+//           // Social Share Buttons
+//           Padding(
+//             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+//             child: Row(
+//               mainAxisAlignment: MainAxisAlignment.start,
+//               children: [
+//                 _SocialButton(
+//                   icon: Icons.more_horiz,
+//                   label: "More",
+//                   onTap: () => _shareToSocial("Other"),
+//                 ),
+//               ],
+//             ),
+//           ),
+
+//           const Divider(height: 1, color: Colors.grey),
+
+//           // Search Bar
+//           Padding(
+//             padding: const EdgeInsets.all(16),
+//             child: TextField(
+//               controller: _searchController,
+//               style: const TextStyle(color: Colors.white),
+//               decoration: InputDecoration(
+//                 hintText: "Search followers...",
+//                 hintStyle: const TextStyle(color: Colors.grey),
+//                 prefixIcon: const Icon(Icons.search, color: Colors.grey),
+//                 filled: true,
+//                 fillColor: Colors.grey[850],
+//                 border: OutlineInputBorder(
+//                   borderRadius: BorderRadius.circular(12),
+//                   borderSide: BorderSide.none,
+//                 ),
+//                 contentPadding: const EdgeInsets.symmetric(vertical: 14),
+//               ),
+//             ),
+//           ),
+
+//           // Selected Count Chip
+//           if (_selectedUserIds.isNotEmpty)
+//             Padding(
+//               padding: const EdgeInsets.symmetric(horizontal: 16),
+//               child: Align(
+//                 alignment: Alignment.centerLeft,
+//                 child: Chip(
+//                   backgroundColor: Colors.blueAccent.withOpacity(0.2),
+//                   label: Text(
+//                     "${_selectedUserIds.length} selected",
+//                     style: const TextStyle(color: Colors.blueAccent),
+//                   ),
+//                 ),
+//               ),
+//             ),
+
+//           // Users List
+//           Expanded(
+//             child: _isLoading
+//                 ? const Center(child: CircularProgressIndicator())
+//                 : _filteredUsers.isEmpty
+//                 ? Center(
+//                     child: Column(
+//                       mainAxisAlignment: MainAxisAlignment.center,
+//                       children: [
+//                         Icon(
+//                           Icons.people_outline,
+//                           size: 64,
+//                           color: Colors.grey[600],
+//                         ),
+//                         const SizedBox(height: 16),
+//                         Text(
+//                           _searchController.text.isEmpty
+//                               ? "No followers yet"
+//                               : "No users found",
+//                           style: TextStyle(
+//                             color: Colors.grey[400],
+//                             fontSize: 16,
+//                           ),
+//                         ),
+//                       ],
+//                     ),
+//                   )
+//                 : ListView.builder(
+//                     padding: const EdgeInsets.symmetric(horizontal: 8),
+//                     itemCount: _filteredUsers.length,
+//                     itemBuilder: (context, index) {
+//                       final doc = _filteredUsers[index];
+//                       final data = doc.data() as Map<String, dynamic>;
+//                       final userId = doc.id;
+//                       final name = data['name'] ?? 'Unknown User';
+//                       final username = data['username'] ?? '';
+//                       final imageUrl = data['image'] as String?;
+
+//                       final isSelected = _selectedUserIds.contains(userId);
+
+//                       return UserTile(
+//                         userId: userId,
+//                         name: name,
+//                         username: username,
+//                         imageUrl: imageUrl,
+//                         isSelected: isSelected,
+//                         onToggle: () {
+//                           setState(() {
+//                             if (isSelected) {
+//                               _selectedUserIds.remove(userId);
+//                             } else {
+//                               _selectedUserIds.add(userId);
+//                             }
+//                           });
+//                         },
+//                       );
+//                     },
+//                   ),
+//           ),
+//         ],
+//       ),
+//     );
+//   }
+// }
+
+// // Extracted reusable widgets
+// class _SocialButton extends StatelessWidget {
+//   final IconData icon;
+//   final String label;
+//   final VoidCallback onTap;
+
+//   const _SocialButton({
+//     required this.icon,
+//     required this.label,
+//     required this.onTap,
+//   });
+
+//   @override
+//   Widget build(BuildContext context) {
+//     return InkWell(
+//       onTap: onTap,
+//       borderRadius: BorderRadius.circular(30),
+//       child: Column(
+//         mainAxisSize: MainAxisSize.min,
+//         children: [
+//           CircleAvatar(
+//             radius: 26,
+//             backgroundColor: Colors.grey[800],
+//             child: Icon(icon, color: Colors.white, size: 28),
+//           ),
+//           const SizedBox(height: 6),
+//           Text(
+//             label,
+//             style: const TextStyle(color: Colors.white, fontSize: 11),
+//           ),
+//         ],
+//       ),
+//     );
+//   }
+// }
+
+// class UserTile extends StatelessWidget {
+//   final String userId;
+//   final String name;
+//   final String? username;
+//   final String? imageUrl;
+//   final bool isSelected;
+//   final VoidCallback onToggle;
+
+//   const UserTile({
+//     Key? key,
+//     required this.userId,
+//     required this.name,
+//     this.username,
+//     this.imageUrl,
+//     required this.isSelected,
+//     required this.onToggle,
+//   }) : super(key: key);
+
+//   @override
+//   Widget build(BuildContext context) {
+//     return ListTile(
+//       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+//       leading: CircleAvatar(
+//         radius: 24,
+//         backgroundImage: imageUrl != null && imageUrl!.isNotEmpty
+//             ? NetworkImage(imageUrl!)
+//             : null,
+//         child: imageUrl == null || imageUrl!.isEmpty
+//             ? const Icon(Icons.person, color: Colors.grey)
+//             : null,
+//       ),
+//       title: Text(
+//         name,
+//         style: const TextStyle(
+//           color: Colors.white,
+//           fontWeight: FontWeight.w500,
+//         ),
+//       ),
+//       subtitle: username != null && username!.isNotEmpty
+//           ? Text('@$username', style: TextStyle(color: Colors.grey[400]))
+//           : null,
+//       trailing: Checkbox(
+//         value: isSelected,
+//         activeColor: Colors.blueAccent,
+//         side: const BorderSide(color: Colors.grey),
+//         onChanged: (_) => onToggle(),
+//       ),
+//       selected: isSelected,
+//       selectedTileColor: Colors.blueAccent.withOpacity(0.1),
+//       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+//       onTap: onToggle,
+//     );
+//   }
+// }

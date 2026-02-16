@@ -9,11 +9,11 @@ import 'package:share_plus/share_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:tiktok/authentication/login_screen.dart';
 import 'package:tiktok/authentication/user.dart';
+import 'package:tiktok/chats/screens/chat_screen.dart';
 import 'package:tiktok/follow_service/follow_service.dart';
 import 'package:tiktok/for_you/save_videos/saved_video_grid.dart';
 import 'package:tiktok/profile/edit_profile_screen.dart';
 import 'package:tiktok/profile/follow_list_screen.dart';
-
 import 'package:tiktok/profile/profile_video_playscreen.dart';
 import 'package:tiktok/profile/profile_videos_grid_items.dart';
 import 'package:tiktok/theme/theme.dart';
@@ -35,12 +35,13 @@ class ProfileScreen extends StatefulWidget {
   _ProfileScreenState createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> {
+class _ProfileScreenState extends State<ProfileScreen>
+    with SingleTickerProviderStateMixin {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FollowService _followService = FollowService();
   final ImagePicker imagePicker = ImagePicker();
-
+  bool _isFollowLoading = false;
   AppUser? _user;
   bool _isLoading = true;
   int _followerCount = 0;
@@ -48,12 +49,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   int _videoCount = 0;
   bool _isFollowing = false;
   final List<String> _profileTabs = ['Videos', 'Saved'];
-  final bool _isFollowLoading = false;
-  // late final List<String> _profileTabs;
+
   @override
   void initState() {
     super.initState();
-    // _profileTabs = widget.isCurrentUser ? ['Videos', 'Saved'] : ['Videos'];
     _loadUserData();
     _checkIfFollowing();
   }
@@ -84,20 +83,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      isScrollControlled: true, // Important for handling overflow
+      isScrollControlled: true,
       builder: (context) => Container(
         padding: const EdgeInsets.all(20),
         constraints: BoxConstraints(
-          maxHeight:
-              MediaQuery.of(context).size.height *
-              0.8, // Limit height to 80% of screen
+          maxHeight: MediaQuery.of(context).size.height * 0.8,
         ),
         child: SingleChildScrollView(
-          // Allows scrolling if content overflows
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Drag handle
               Center(
                 child: Container(
                   width: 40,
@@ -109,10 +104,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-
-              // Theme Toggle Item
               _buildThemeToggleItem(),
-
               _buildSettingsItem(
                 icon: Icons.privacy_tip,
                 text: 'Account Privacy',
@@ -121,7 +113,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   _showComingSoonSnackbar('Account Privacy');
                 },
               ),
-
               _buildSettingsItem(
                 icon: Icons.share,
                 text: 'Share App',
@@ -130,7 +121,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   _shareApp();
                 },
               ),
-
               _buildSettingsItem(
                 icon: Icons.info,
                 text: 'About',
@@ -139,7 +129,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   _showAboutDialog();
                 },
               ),
-
               _buildSettingsItem(
                 icon: Icons.policy,
                 text: 'Terms and Conditions',
@@ -279,7 +268,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text('OK', style: TextStyle(color: Colors.red)),
+            child: const Text('OK', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -376,21 +365,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final currentUserId = _auth.currentUser?.uid;
     if (currentUserId == null) return;
 
-    if (_isFollowing) {
-      await _followService.unfollowUser(widget.userId);
-    } else {
-      await _followService.followUser(widget.userId);
-    }
+    try {
+      if (_isFollowing) {
+        _followService.unfollowUser(widget.userId);
+        _followerCount = (_followerCount - 1).clamp(0, 999999);
+      } else {
+        _followService.followUser(widget.userId);
+        _followerCount += 1;
+      }
 
-    setState(() => _isFollowing = !_isFollowing);
-    _loadFollowerCount();
+      setState(() {
+        _isFollowing = !_isFollowing;
+      });
+    } catch (e) {
+      debugPrint("Follow error: $e");
+    }
   }
 
   Future<void> _logout() async {
     try {
       final bool? confirm = await showDialog(
         context: context,
-
         builder: (BuildContext context) {
           return AlertDialog(
             title: Text(
@@ -520,8 +515,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               onPressed: () async {
                 if (!mounted) return;
-                Navigator.pop(sheetContext); // Close sheet first
-
+                Navigator.pop(sheetContext);
                 await _deleteVideo(videoId, videoUrl, thumbUrl);
               },
               child: const Text(
@@ -554,23 +548,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (!mounted) return;
 
     try {
-      // Delete video document
       await _firestore.collection('videos').doc(videoId).delete();
 
-      // Delete video from storage
       if (videoUrl.isNotEmpty) {
         await FirebaseStorage.instance.refFromURL(videoUrl).delete();
       }
 
-      // Delete thumbnail
       if (thumbUrl.isNotEmpty) {
         await FirebaseStorage.instance.refFromURL(thumbUrl).delete();
       }
     } catch (e) {
-      // if (!mounted) return;
-      // Navigator.of(context, rootNavigator: true).pop();
-
-      // Close loading
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -591,7 +578,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         builder: (context) => EditProfileScreen(
           user: _user!,
           onProfileUpdated: () {
-            // Use a slight delay to ensure the edit screen is fully dismissed
             Future.delayed(const Duration(milliseconds: 300), () {
               if (mounted) {
                 _loadUserData();
@@ -611,6 +597,110 @@ class _ProfileScreenState extends State<ProfileScreen> {
             FollowListScreen(userId: widget.userId, mode: 'followers'),
       ),
     );
+  }
+
+  // void _openChat() async {
+  //   final currentUserId = _auth.currentUser!.uid;
+  //   final otherUserId = widget.userId;
+
+  //   final chatId = currentUserId.compareTo(otherUserId) < 0
+  //       ? "$currentUserId-$otherUserId"
+  //       : "$otherUserId-$currentUserId";
+
+  //   final chatRef = _firestore.collection("chats").doc(chatId);
+
+  //   Navigator.push(
+  //     context,
+  //     MaterialPageRoute(
+  //       builder: (_) => ChatScreen(
+  //         chatId: chatId,
+  //         otherUserId: otherUserId,
+  //         otherUserName: _user?.name ?? "User",
+  //         otherUserPhoto: _user?.image ?? "",
+  //       ),
+  //     ),
+  //   );
+
+  //   Future.microtask(() async {
+  //     final currentUserDoc = await _firestore
+  //         .collection("users")
+  //         .doc(currentUserId)
+  //         .get();
+  //     final otherUserDoc = await _firestore
+  //         .collection("users")
+  //         .doc(otherUserId)
+  //         .get();
+
+  //     final currentData = currentUserDoc.data() ?? {};
+  //     final otherData = otherUserDoc.data() ?? {};
+
+  //     final exists = await chatRef.get();
+
+  //     if (!exists.exists) {
+  //       await chatRef.set({
+  //         "chatId": chatId,
+  //         "participants": [currentUserId, otherUserId],
+  //         "lastMessage": "",
+  //         "lastTimestamp": FieldValue.serverTimestamp(),
+  //       });
+  //     }
+
+  //     await chatRef.update({
+  //       "user1": {
+  //         "uid": currentUserId,
+  //         "name": currentData["name"] ?? "",
+  //         "image": currentData["image"] ?? "",
+  //       },
+  //       "user2": {
+  //         "uid": otherUserId,
+  //         "name": otherData["name"] ?? "",
+  //         "image": otherData["image"] ?? "",
+  //       },
+  //       "lastTimestamp": FieldValue.serverTimestamp(),
+  //     });
+  //   });
+  // }
+
+  void _openChat() async {
+    final currentUserId = FirebaseAuth.instance.currentUser!.uid;
+    final otherUserId = widget.userId;
+
+    // Consistent chat ID format: smallerId_largerId (with underscore)
+    final chatId = currentUserId.compareTo(otherUserId) < 0
+        ? "${currentUserId}_$otherUserId"
+        : "${otherUserId}_$currentUserId";
+
+    // Navigate immediately (don't wait for Firestore)
+    Get.to(
+      () => ChatScreen(
+        chatId: chatId,
+        otherUserId: otherUserId,
+        otherUserName: _user?.name ?? "User",
+        otherUserPhoto: _user?.image ?? "",
+      ),
+    );
+
+    // Create or update chat document in background (fire-and-forget)
+    //final chatRef = FirebaseFirestore.instance.collection('chats').doc(chatId);
+
+    // try {
+    //   final chatSnapshot = await chatRef.get();
+
+    //   if (!chatSnapshot.exists) {
+    //     await chatRef.set({
+    //       'participants': [currentUserId, otherUserId],
+    //       'lastMessage': 'Say hi!',
+    //       'lastMessageTime': FieldValue.serverTimestamp(),
+    //       'lastMessageType': 'text',
+    //     }, SetOptions(merge: true));
+    //   } else {
+    //     // Just update timestamp so chat appears at top
+    //     await chatRef.update({'lastMessageTime': FieldValue.serverTimestamp()});
+    //   }
+    // } catch (e) {
+    //   debugPrint("Chat init error: $e");
+    //   // Don't block UI even if this fails
+    // }
   }
 
   void _navigateToFollowing() {
@@ -677,7 +767,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: Column(
                   children: [
                     _buildProfileHeader(),
+                    const SizedBox(height: 8),
                     _buildProfileStats(),
+                    const SizedBox(height: 16),
                     _buildActionButtons(),
                     const SizedBox(height: 16),
                   ],
@@ -708,416 +800,335 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildProfileHeader() {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Stack(
-            alignment: Alignment.center,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 100,
-                height: 100,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: Theme.of(context).brightness == Brightness.dark
-                        ? Colors.white
-                        : Colors.black,
-                    width: 2,
-                  ),
-                ),
-                child: ClipOval(
-                  child: CachedNetworkImage(
-                    imageUrl: _user!.image ?? '',
-                    fit: BoxFit.cover,
-                    placeholder: (context, url) => Container(
-                      color: Colors.grey[300],
-                      child: Center(
-                        child: CircularProgressIndicator(color: Colors.red),
-                      ),
-                    ),
-                    errorWidget: (context, url, error) => Container(
-                      color: Colors.grey[300],
-                      child: Icon(
-                        Icons.person,
-                        color: Theme.of(context).brightness == Brightness.dark
-                            ? Colors.white
-                            : Colors.black,
-                        size: 40,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              if (widget.isCurrentUser)
-                Positioned(
-                  bottom: 0,
-                  right: 0,
-                  child: Container(
-                    width: 30,
-                    height: 30,
+              Stack(
+                children: [
+                  Container(
+                    width: 70,
+                    height: 70,
                     decoration: BoxDecoration(
-                      color: Colors.red,
                       shape: BoxShape.circle,
                       border: Border.all(
-                        color: Theme.of(context).scaffoldBackgroundColor,
-                        width: 2,
+                        color: Theme.of(context).dividerColor,
+                        width: 1,
                       ),
                     ),
-                    child: IconButton(
-                      padding: EdgeInsets.zero,
-                      icon: const Icon(
-                        Icons.edit,
-                        size: 15,
-                        color: Colors.white,
+                    child: ClipOval(
+                      child: CachedNetworkImage(
+                        imageUrl: _user!.image ?? '',
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) => Container(
+                          color: Colors.grey[300],
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              color: Colors.red,
+                              strokeWidth: 2,
+                            ),
+                          ),
+                        ),
+                        errorWidget: (context, url, error) => Container(
+                          color: Colors.grey[300],
+                          child: Icon(
+                            Icons.person,
+                            color:
+                                Theme.of(context).brightness == Brightness.dark
+                                ? Colors.white
+                                : Colors.black,
+                            size: 30,
+                          ),
+                        ),
                       ),
-                      onPressed: _navigateToEditProfile,
                     ),
                   ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            _user!.name ?? "User",
-            style: TextStyle(
-              color: Theme.of(context).textTheme.bodyLarge?.color,
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 8),
-          if (_user!.bio != null && _user!.bio!.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Text(
-                _user!.bio!,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Theme.of(
-                    context,
-                  ).textTheme.bodyLarge?.color?.withOpacity(0.7),
+                  if (widget.isCurrentUser)
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: Container(
+                        width: 24,
+                        height: 24,
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Theme.of(context).scaffoldBackgroundColor,
+                            width: 2,
+                          ),
+                        ),
+                        child: IconButton(
+                          padding: EdgeInsets.zero,
+                          icon: const Icon(
+                            Icons.edit,
+                            size: 12,
+                            color: Colors.white,
+                          ),
+                          onPressed: _navigateToEditProfile,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _user!.name ?? "User",
+                      style: TextStyle(
+                        color: Theme.of(context).textTheme.bodyLarge?.color,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '@${_user!.name?.replaceAll(' ', '').toLowerCase() ?? "user"}',
+                      style: TextStyle(
+                        color: Theme.of(
+                          context,
+                        ).textTheme.bodyLarge?.color?.withOpacity(0.6),
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    if (_user!.bio != null && _user!.bio!.isNotEmpty)
+                      Text(
+                        _user!.bio!,
+                        style: TextStyle(
+                          color: Theme.of(
+                            context,
+                          ).textTheme.bodyLarge?.color?.withOpacity(0.7),
+                          fontSize: 14,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                  ],
                 ),
               ),
-            ),
+            ],
+          ),
         ],
       ),
     );
   }
 
-  // Widget _buildProfileStats() {
-  //   // ignore: no_leading_underscores_for_local_identifiers
-  //   String _formatCount(int count) {
-  //     if (count < 1000) return count.toString();
-  //     if (count < 1000000) return '${(count / 1000).toStringAsFixed(1)}K';
-  //     return '${(count / 1000000).toStringAsFixed(1)}M';
-  //   }
-
-  //   return Container(
-  //     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-  //     child: Row(
-  //       mainAxisAlignment: MainAxisAlignment.spaceAround,
-  //       children: [
-  //         _buildStatItem(_formatCount(_videoCount), 'Videos'),
-  //         _buildTappableStatItem(
-  //           _formatCount(_followerCount),
-  //           'Followers',
-  //           _navigateToFollowers,
-  //         ),
-  //         _buildTappableStatItem(
-  //           _formatCount(_followingCount),
-  //           'Following',
-  //           _navigateToFollowing,
-  //         ),
-
-  //       ],
-
-  //     ),
-  //   );
-  // }
-
   Widget _buildProfileStats() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _buildStatItem(
+            label: 'Videos',
+            value: formatNumber(_videoCount),
+            onTap: null,
+          ),
+
+          _buildStatItem(
+            label: 'Followers',
+            value: formatNumber(_followerCount),
+            onTap: _navigateToFollowers,
+          ),
+
+          _buildStatItem(
+            label: 'Following',
+            value: formatNumber(_followingCount),
+            onTap: _navigateToFollowing,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatItem({
+    required String label,
+    required String value,
+    required VoidCallback? onTap,
+  }) {
+    return Expanded(
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Column(
+              children: [
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).textTheme.bodyLarge?.color,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Theme.of(context).textTheme.bodyLarge?.color,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionButtons() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final textColor = isDark ? Colors.white : Colors.black;
+    final buttonHeight = 37.0;
+    final borderRadius = BorderRadius.circular(6);
 
-    Widget buildStat(String value, String label, VoidCallback onTap) {
-      return GestureDetector(
-        onTap: onTap,
-        child: AnimatedScale(
-          duration: const Duration(milliseconds: 150),
-          scale: 1.0,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Text(
-                value,
+    Widget buildButton({
+      required String text,
+      required VoidCallback onTap,
+      required Color bg,
+      required Color fg,
+      FontWeight fw = FontWeight.w600,
+    }) {
+      return Container(
+        height: buttonHeight,
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: borderRadius,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.07),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: borderRadius,
+            onTap: onTap,
+            child: Center(
+              child: Text(
+                text,
                 style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: textColor, // Auto themed
+                  color: fg,
+                  fontSize: 15,
+                  fontWeight: fw,
+                  letterSpacing: 0.3,
                 ),
               ),
-              const SizedBox(height: 3),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: textColor.withOpacity(0.8), // Subtle tint
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       );
     }
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          // buildStat("$_followerCount", "Followers", _navigateToFollowers),
-          // buildStat("$_followingCount", "Following", _navigateToFollowing),
-          // buildStat("$_videoCount", "Videos", () {}),
-          _statItem(
-            "Followers",
-            formatNumber(_followerCount),
-            _navigateToFollowers,
-          ),
-          _statItem(
-            "Following",
-            formatNumber(_followingCount),
-            _navigateToFollowing,
-          ),
-          _statItem("Videos", formatNumber(_videoCount), null),
-        ],
-      ),
-    );
-  }
-
-  Widget _statItem(String label, String count, VoidCallback? onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        children: [
-          Text(
-            count,
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Theme.of(context).textTheme.bodyLarge?.color,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 14,
-              color: Theme.of(
-                context,
-              ).textTheme.bodyLarge?.color?.withOpacity(0.7),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Widget _buildStatItem(String value, String label) {
-  //   return Column(
-  //     children: [
-  //       Text(
-  //         value,
-  //         style: TextStyle(
-  //           color: Theme.of(context).textTheme.bodyLarge?.color,
-  //           fontSize: 16,
-  //           fontWeight: FontWeight.bold,
-  //         ),
-  //       ),
-  //       const SizedBox(height: 4),
-  //       Text(
-  //         label,
-  //         style: TextStyle(
-  //           color: Theme.of(
-  //             context,
-  //           ).textTheme.bodyLarge?.color?.withOpacity(0.7),
-  //           fontSize: 12,
-  //         ),
-  //       ),
-  //     ],
-  //   );
-  // }
-
-  // Widget _buildTappableStatItem(
-  //   String value,
-  //   String label,
-  //   VoidCallback onTap,
-  // ) {
-  //   return GestureDetector(
-  //     onTap: onTap,
-  //     child: MouseRegion(
-  //       cursor: SystemMouseCursors.click,
-  //       child: Container(
-  //         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-  //         decoration: BoxDecoration(
-  //           // gradient: const LinearGradient(
-  //           //   begin: Alignment.topLeft,
-  //           //   end: Alignment.bottomRight,
-  //           //   // colors: [Color(0xFF7E5555), Color(0xFF541010)],
-  //           //   colors: [
-  //           //     Color.fromARGB(255, 161, 182, 219),
-  //           //     Color.fromARGB(255, 43, 182, 246),
-  //           //   ],
-  //           // ),
-  //           borderRadius: BorderRadius.circular(16),
-  //           boxShadow: [
-  //             // BoxShadow(
-  //             //   color: Colors.black.withOpacity(0.0),
-  //             //   blurRadius: 8,
-  //             //   offset: const Offset(0, 4),
-  //             // ),
-  //           ],
-  //           border: Border.all(
-  //             color: Theme.of(context).brightness == Brightness.dark
-  //                 ? const Color.fromARGB(255, 103, 103, 103)
-  //                 : const Color.fromARGB(255, 212, 212, 212)!,
-  //             width: 1,
-  //           ),
-  //         ),
-  //         child: Column(
-  //           mainAxisAlignment: MainAxisAlignment.center,
-  //           children: [
-  //             Text(
-  //               value,
-  //               style: const TextStyle(
-  //                 color: Colors.white,
-  //                 fontSize: 18,
-  //                 fontWeight: FontWeight.bold,
-  //                 shadows: [
-  //                   Shadow(
-  //                     blurRadius: 4,
-  //                     color: Colors.black,
-  //                     offset: Offset(1, 1),
-  //                   ),
-  //                 ],
-  //               ),
-  //             ),
-  //             const SizedBox(height: 6),
-  //             Text(
-  //               label,
-  //               style: TextStyle(
-  //                 color: Colors.grey[200],
-  //                 fontSize: 15,
-  //                 fontWeight: FontWeight.w900,
-  //               ),
-  //             ),
-  //           ],
-  //         ),
-  //       ),
-  //     ),
-  //   );
-  //}
-
-  Widget _buildActionButtons() {
-    final buttonStyle = ElevatedButton.styleFrom(
-      backgroundColor: Theme.of(context).brightness == Brightness.dark
-          ? Colors.grey[900]
-          : Colors.grey[200],
-      foregroundColor: Theme.of(context).brightness == Brightness.dark
-          ? Colors.white
-          : Colors.black,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      padding: const EdgeInsets.symmetric(vertical: 12),
-    );
-
+    // ---------- CURRENT USER ----------
     if (widget.isCurrentUser) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 18),
         child: Row(
           children: [
             Expanded(
-              child: ElevatedButton(
-                onPressed: _navigateToEditProfile,
-                style: buttonStyle,
-                child: const Text('Edit Profile'),
+              child: buildButton(
+                text: "Edit Profile",
+                onTap: _navigateToEditProfile,
+                bg: isDark
+                    ? Color.fromARGB(255, 71, 70, 70)
+                    : Color.fromARGB(255, 231, 230, 230),
+                fg: isDark
+                    ? const Color.fromARGB(255, 255, 255, 255)
+                    : Colors.black,
               ),
             ),
-            const SizedBox(width: 8),
-            ElevatedButton(
-              onPressed: _shareProfile,
-              style: buttonStyle.copyWith(
-                padding: const MaterialStatePropertyAll(EdgeInsets.all(12)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: buildButton(
+                text: "Share",
+                onTap: _shareProfile,
+                bg: isDark
+                    ? Color.fromARGB(255, 71, 70, 70)
+                    : Color.fromARGB(255, 231, 230, 230),
+                fg: isDark
+                    ? const Color.fromARGB(255, 255, 255, 255)
+                    : Colors.black,
               ),
-              child: const Icon(Icons.share, size: 20),
             ),
           ],
         ),
       );
     }
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+    // ---------- OTHER USER PROFILE ----------
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 15),
       child: Row(
         children: [
+          // Follow button (bigger)
           Expanded(
-            child: ElevatedButton(
-              onPressed: _isFollowLoading ? null : _toggleFollow,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _isFollowing
-                    ? (Theme.of(context).brightness == Brightness.dark
-                          ? Colors.grey[800]
-                          : const Color.fromARGB(255, 97, 84, 84))
-                    : Colors.red,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 300),
-                transitionBuilder: (Widget child, Animation<double> animation) {
-                  return ScaleTransition(
-                    scale: animation,
-                    child: FadeTransition(opacity: animation, child: child),
-                  );
-                },
-                child: _isFollowLoading
-                    ? const SizedBox(
-                        key: ValueKey("loader"),
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : Text(
-                        _isFollowing ? 'Unfollow' : 'Follow',
-                        key: ValueKey<String>(
-                          _isFollowing ? "Unfollow" : "Follow",
-                        ),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 17,
-                        ),
-                      ),
-              ),
+            flex: 2,
+            child: buildButton(
+              text: _isFollowing ? "Following" : "Follow",
+              onTap: _toggleFollow,
+              bg: _isFollowing
+                  ? isDark
+                        ? Color.fromARGB(255, 71, 70, 70)
+                        : Colors.grey.shade200
+                  : const Color.fromARGB(255, 255, 43, 43),
+              fg: _isFollowing
+                  ? isDark
+                        ? Colors.grey.shade200
+                        : Colors.black
+                  : Colors.grey.shade200,
+              fw: FontWeight.w700,
             ),
           ),
 
-          const SizedBox(width: 8),
-          ElevatedButton(
-            onPressed: () {
-              // Message functionality
-              // share  functionality
-              _shareProfile();
-            },
-            style: buttonStyle.copyWith(
-              padding: const MaterialStatePropertyAll(EdgeInsets.all(12)),
+          const SizedBox(width: 12),
+
+          // Message button
+          Expanded(
+            flex: 1,
+            child: buildButton(
+              text: "Message",
+              onTap: _openChat,
+              bg: isDark
+                  ? Color.fromARGB(255, 71, 70, 70)
+                  : Color.fromARGB(255, 231, 230, 230),
+              fg: isDark
+                  ? const Color.fromARGB(255, 255, 255, 255)
+                  : Colors.black,
             ),
-            child: const Icon(Icons.share_outlined, size: 20),
+          ),
+
+          const SizedBox(width: 12),
+
+          // Share button
+          Expanded(
+            flex: 1,
+            child: buildButton(
+              text: "Share",
+              onTap: _shareProfile,
+              bg: isDark
+                  ? Color.fromARGB(255, 71, 70, 70)
+                  : Color.fromARGB(255, 231, 230, 230),
+              fg: isDark
+                  ? const Color.fromARGB(255, 255, 255, 255)
+                  : Colors.black,
+            ),
           ),
         ],
       ),
@@ -1134,7 +1145,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
-            child: CircularProgressIndicator(color: Colors.red),
+            child: CircularProgressIndicator(
+              color: Color.fromARGB(255, 255, 36, 20),
+            ),
           );
         }
 
@@ -1164,7 +1177,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 if (widget.isCurrentUser)
                   TextButton(
                     onPressed: () {
-                      // Navigate to upload screen
                       Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -1185,7 +1197,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final videos = snapshot.data!.docs.map((doc) {
           final data = doc.data() as Map<String, dynamic>;
           return Video(
-            videoId: doc.id, // Keep the Firestore document ID here
+            videoId: doc.id,
             videoUrl: data['videoUrl'] ?? '',
             thumbnailUrl: data['thumbnailUrl'] ?? '',
             totalComments: data['totalComments'],
@@ -1221,9 +1233,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       "${video.thumbnailUrl}",
                     )
                   : null,
-
               onTap: () {
-                // Open vertical swipe video feed with GetX
                 Get.to(
                   () => ProfileVideoFeedScreen(
                     videos: videos,
@@ -1232,7 +1242,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 );
               },
               child: VideoGridItem(
-                videoId: "${video.videoId}", // Pass the correct document ID
+                videoId: "${video.videoId}",
                 thumbnailUrl: "${video.thumbnailUrl}",
               ),
             );

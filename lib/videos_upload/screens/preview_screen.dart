@@ -1,5 +1,3 @@
-// ignore_for_file: dead_code
-
 import 'dart:async';
 import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -28,22 +26,31 @@ class _PreviewScreenState extends State<PreviewScreen> {
   bool _isPlaying = true;
   final TextEditingController _descriptionController = TextEditingController();
   final FocusNode _descriptionFocusNode = FocusNode();
-  bool _showDescriptionField = false;
+  bool _showDescriptionField = true;
   int _descriptionLength = 0;
-  final int _maxDescriptionLength = 2200;
+  final int _maxDescriptionLength = 200;
+  bool _isExpanded = false;
+  bool _showDuration = true;
+  Size? _videoSize;
+  double? _aspectRatio;
 
-  // Performance optimization: Debounce timer for description updates
   Timer? _descriptionDebounceTimer;
+  Timer? _durationTimer;
 
   @override
   void initState() {
     super.initState();
     _initializeVideoController();
     _descriptionController.addListener(_onDescriptionChanged);
+
+    _durationTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) {
+        setState(() => _showDuration = false);
+      }
+    });
   }
 
   void _onDescriptionChanged() {
-    // Debounce to avoid frequent rebuilds
     _descriptionDebounceTimer?.cancel();
     _descriptionDebounceTimer = Timer(const Duration(milliseconds: 300), () {
       if (mounted) {
@@ -60,6 +67,18 @@ class _PreviewScreenState extends State<PreviewScreen> {
 
     try {
       await _controller.initialize();
+
+      // Get video dimensions for proper layout
+      if (_controller.value.isInitialized) {
+        _videoSize = _controller.value.size;
+        _aspectRatio = _controller.value.aspectRatio;
+        if (_aspectRatio == null ||
+            _aspectRatio!.isNaN ||
+            _aspectRatio!.isInfinite) {
+          _aspectRatio = 9 / 16; // Fallback to 9:16 for vertical videos
+        }
+      }
+
       _controller.setLooping(true);
       await _controller.play();
       if (mounted) setState(() {});
@@ -81,6 +100,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
   @override
   void dispose() {
     _descriptionDebounceTimer?.cancel();
+    _durationTimer?.cancel();
     _controller.removeListener(_videoListener);
     _controller.dispose();
     _descriptionController.dispose();
@@ -108,16 +128,122 @@ class _PreviewScreenState extends State<PreviewScreen> {
     }
   }
 
-  void _toggleDescriptionField() {
+  void _toggleDescriptionExpansion() {
     setState(() {
-      _showDescriptionField = !_showDescriptionField;
+      _isExpanded = !_isExpanded;
     });
+  }
 
-    if (_showDescriptionField) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _descriptionFocusNode.requestFocus();
-      });
-    }
+  void _showVideoInfo() {
+    final duration = _controller.value.duration;
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        final theme = Theme.of(context);
+        final isDark = theme.brightness == Brightness.dark;
+        final infoTextColor = isDark ? Colors.grey[300] : Colors.grey[800];
+
+        return Container(
+          padding: const EdgeInsets.all(24),
+          color: isDark ? const Color(0xFF0B0B0B) : null,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.grey[700] : Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Video Details',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 16),
+              _buildInfoRow(
+                'Duration',
+                '${duration.inMinutes}:${(duration.inSeconds % 60).toString().padLeft(2, '0')}',
+                textColor: infoTextColor,
+              ),
+              if (_videoSize != null)
+                _buildInfoRow(
+                  'Resolution',
+                  '${_videoSize!.width.toInt()}x${_videoSize!.height.toInt()}',
+                  textColor: infoTextColor,
+                ),
+              if (_aspectRatio != null)
+                _buildInfoRow(
+                  'Aspect Ratio',
+                  _aspectRatio!.toStringAsFixed(2),
+                  textColor: infoTextColor,
+                ),
+              if (_audioSelection != null) ...[
+                // _buildInfoRow(
+                //   'Selected Audio',
+                //   _audioSelection?.songName ?? "",
+                //   textColor: infoTextColor,
+                // ),
+                _buildInfoRow(
+                  'Audio Duration',
+                  '${_audioSelection!.duration.toStringAsFixed(1)}s',
+                  textColor: infoTextColor,
+                ),
+              ],
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    // backgroundColor: theme.colorScheme.surface,
+                  ),
+                  child: const Text('Close'),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildInfoRow(String label, String value, {Color? textColor}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: textColor ?? Colors.grey[600],
+              fontSize: 14,
+            ),
+          ),
+          Text(
+            value,
+            style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _onMergePressed() async {
@@ -131,7 +257,6 @@ class _PreviewScreenState extends State<PreviewScreen> {
     setState(() => _processing = true);
 
     try {
-      // Validate audio file exists
       final audioFile = File(_audioSelection!.path);
       if (!await audioFile.exists()) {
         _showErrorSnackBar('Selected audio file not found');
@@ -183,7 +308,6 @@ class _PreviewScreenState extends State<PreviewScreen> {
 
     final file = widget.videoFile;
 
-    // Validate file exists and is readable
     try {
       if (!await file.exists()) {
         _showErrorSnackBar('Video file not found');
@@ -207,7 +331,6 @@ class _PreviewScreenState extends State<PreviewScreen> {
       return;
     }
 
-    // Upload confirmation dialog
     final shouldProceed = await _showUploadConfirmation();
     if (!shouldProceed) return;
 
@@ -218,9 +341,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
 
     try {
       final userId = await _getCurrentUserId();
-      final songName = _audioSelection?.songName ?? "Original sound";
-
-      debugPrint('🎵 Uploading with song name: $songName');
+      final songName = _audioSelection?.songName ?? "";
 
       final result = await FirebaseService.uploadVideoFile(
         file,
@@ -253,7 +374,6 @@ class _PreviewScreenState extends State<PreviewScreen> {
         _showErrorSnackBar('Upload failed. Please try again.');
       }
     } catch (e) {
-      debugPrint('⚠️ Upload error: $e');
       _showErrorSnackBar('Unexpected error during upload: ${e.toString()}');
       if (mounted) setState(() => _uploading = false);
     }
@@ -269,22 +389,34 @@ class _PreviewScreenState extends State<PreviewScreen> {
 
   Future<bool> _showUploadConfirmation() async {
     if (_descriptionController.text.trim().isEmpty) {
+      final theme = Theme.of(context);
+      final isDark = theme.brightness == Brightness.dark;
       return await showDialog<bool>(
             context: context,
-            barrierDismissible: false,
+            barrierDismissible: true,
             builder: (context) => AlertDialog(
+              backgroundColor: isDark ? const Color(0xFF121212) : null,
               title: const Text('Upload Without Description?'),
               content: const Text(
                 'You haven\'t added a description. Would you like to add one before uploading?',
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
               ),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context, false),
                   child: const Text('Add Description'),
                 ),
-                TextButton(
+                ElevatedButton(
                   onPressed: () => Navigator.pop(context, true),
-                  child: const Text('Upload Anyway'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: theme.colorScheme.primary,
+                  ),
+                  child: const Text(
+                    'Upload Anyway',
+                    style: TextStyle(color: Colors.white),
+                  ),
                 ),
               ],
             ),
@@ -304,37 +436,65 @@ class _PreviewScreenState extends State<PreviewScreen> {
 
   void _showErrorSnackBar(String message) {
     if (!mounted) return;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
+        content: Row(
+          children: [
+            const Icon(Icons.error_outline, color: Colors.white),
+            const SizedBox(width: 8),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: isDark ? Colors.red.shade400 : Colors.red,
         behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 4),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
     );
   }
 
   void _showSuccessSnackBar(String message) {
     if (!mounted) return;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.green,
+        content: Row(
+          children: [
+            const Icon(Icons.check_circle, color: Colors.white),
+            const SizedBox(width: 8),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: isDark ? Colors.green.shade600 : Colors.green,
         behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 3),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
     );
   }
 
   void _showProcessingSnackBar(String phase) {
     if (!mounted) return;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     ScaffoldMessenger.of(context).removeCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(phase),
-        backgroundColor: Colors.blue,
+        content: Row(
+          children: [
+            SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                color: Colors.white,
+                strokeWidth: 2,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(phase),
+          ],
+        ),
+        backgroundColor: isDark ? Colors.blueGrey.shade700 : Colors.blue,
         behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 2),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
     );
   }
@@ -344,480 +504,649 @@ class _PreviewScreenState extends State<PreviewScreen> {
     final isInitialized = _controller.value.isInitialized;
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
+    // Colors based on brightness
+    final surfaceColor = isDark ? const Color(0xFF121212) : colorScheme.surface;
+    final cardShadowColor = isDark
+        ? Colors.black.withOpacity(0.6)
+        : Colors.black.withOpacity(0.12);
+    final hintTextColor = isDark ? Colors.grey[400] : Colors.grey[600];
+    final mutedTextColor = isDark ? Colors.grey[300] : Colors.grey[700];
 
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          'Preview Video',
+          'Preview & Upload',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         centerTitle: true,
-        backgroundColor: Colors.transparent,
-        elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          icon: Icon(
+            Icons.arrow_back,
+            color: isDark ? Colors.white : Colors.black,
+          ),
           onPressed: _processing || _uploading
               ? null
               : () => Navigator.pop(context),
         ),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
         actions: [
-          if (!_uploading)
-            IconButton(
-              icon: const Icon(Icons.info_outline),
-              onPressed: () => _showVideoInfo(),
+          IconButton(
+            icon: Icon(
+              Icons.info_outline_rounded,
+              color: isDark ? Colors.white : Colors.black,
             ),
+            onPressed: _showVideoInfo,
+            tooltip: 'Video Details',
+          ),
         ],
       ),
-      body: Column(
+      body: Stack(
         children: [
-          // Video Preview Section
-          Expanded(
-            flex: 4,
+          // Main content
+          SingleChildScrollView(
             child: Container(
-              margin: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                color: Colors.black,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.3),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    if (!isInitialized)
-                      const Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            CircularProgressIndicator(),
-                            SizedBox(height: 16),
-                            Text(
-                              'Loading video...',
-                              style: TextStyle(color: Colors.white),
-                            ),
-                          ],
-                        ),
-                      ),
-                    if (isInitialized)
-                      AspectRatio(
-                        aspectRatio: _controller.value.aspectRatio,
-                        child: VideoPlayer(_controller),
-                      ),
-                    if (isInitialized)
-                      Positioned.fill(
-                        child: AnimatedOpacity(
-                          opacity: _isPlaying ? 0 : 1,
-                          duration: const Duration(milliseconds: 300),
-                          child: Container(
-                            color: Colors.black38,
-                            child: Center(
-                              child: FloatingActionButton(
-                                onPressed: _togglePlayPause,
-                                backgroundColor: Colors.black54,
-                                child: Icon(
-                                  _isPlaying ? Icons.pause : Icons.play_arrow,
-                                  size: 30,
-                                  color: Colors.white,
+              padding: const EdgeInsets.all(16),
+              color: isDark ? const Color(0xFF0B0B0B) : null,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Top section with video and description
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 100),
+                    child: IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // Video Preview - Left Side
+                          Expanded(
+                            flex: 2,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(20),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: cardShadowColor,
+                                    blurRadius: 20,
+                                    offset: const Offset(0, 10),
+                                  ),
+                                ],
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(20),
+                                child: Container(
+                                  color: Colors.black,
+                                  child: Stack(
+                                    fit: StackFit.expand,
+                                    alignment: Alignment.center,
+                                    children: [
+                                      if (!isInitialized)
+                                        const Center(
+                                          child: CircularProgressIndicator(),
+                                        ),
+                                      if (isInitialized && _aspectRatio != null)
+                                        _buildVideoPlayer(),
+                                      if (isInitialized)
+                                        _buildVideoOverlay(isDark: isDark),
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          ),
+                          const SizedBox(width: 6),
 
-          // Description Input Section
-          if (_showDescriptionField) _buildDescriptionField(theme, colorScheme),
-
-          // Audio Trimmer Section
-          Expanded(
-            flex: 3,
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16),
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: colorScheme.surface,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Audio Selection',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                          // Description Box - Right Side
+                          Expanded(
+                            flex: 3,
+                            child: _buildDescriptionBox(
+                              theme,
+                              colorScheme,
+                              surfaceColor,
+                              hintTextColor,
+                              mutedTextColor,
+                              isDark,
+                            ),
+                          ),
+                        ],
                       ),
-                      IconButton(
-                        icon: Icon(
-                          _showDescriptionField
-                              ? Icons.description
-                              : Icons.description_outlined,
-                          color: _showDescriptionField
-                              ? colorScheme.primary
-                              : colorScheme.onSurface,
-                        ),
-                        onPressed: _toggleDescriptionField,
-                        tooltip: 'Add Description',
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Expanded(
-                    child: AudioTrimmerWidget(
-                      onChanged: (sel) => setState(() => _audioSelection = sel),
                     ),
                   ),
+
+                  const SizedBox(height: 20),
+
+                  // Audio Trimmer Section
+                  _buildAudioTrimmerSection(
+                    theme,
+                    colorScheme,
+                    surfaceColor,
+                    mutedTextColor,
+                    isDark,
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // Action Buttons
+                  _buildActionButtonsSection(theme, colorScheme, isDark),
+
+                  const SizedBox(height: 40),
                 ],
               ),
             ),
           ),
 
-          // Progress Indicators
-          if (_processing || _uploading) _buildProgressIndicators(),
-
-          // Action Buttons
-          _buildActionButtons(colorScheme),
-
-          // Uploaded URL
-          if (_uploadedUrl != null) _buildUploadSuccessWidget(),
-
-          const SizedBox(height: 16),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDescriptionField(ThemeData theme, ColorScheme colorScheme) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Video Description',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
+          // Upload Success Overlay
+          if (_uploadedUrl != null)
+            Positioned.fill(
+              child: Container(
+                color: Colors.black.withOpacity(0.7),
+                child: Center(
+                  child: Container(
+                    width: 320,
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: surfaceColor,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: cardShadowColor,
+                          blurRadius: 20,
+                          offset: const Offset(0, 10),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.check_circle,
+                          color: Colors.green.shade400,
+                          size: 60,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Upload Successful!',
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? Colors.white : Colors.black87,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Your video has been uploaded successfully.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: mutedTextColor),
+                        ),
+                        const SizedBox(height: 24),
+                        ElevatedButton(
+                          onPressed: _navigateAfterUpload,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: colorScheme.primary,
+                            foregroundColor: colorScheme.onPrimary,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 32,
+                              vertical: 16,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text('Back to Home'),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-              IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: _toggleDescriptionField,
-                iconSize: 20,
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _descriptionController,
-            focusNode: _descriptionFocusNode,
-            maxLines: 4,
-            maxLength: _maxDescriptionLength,
-            decoration: InputDecoration(
-              hintText: 'Describe your video...',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: colorScheme.outline),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: colorScheme.primary),
-              ),
-              contentPadding: const EdgeInsets.all(16),
             ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              Text(
-                '$_descriptionLength/$_maxDescriptionLength',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: _descriptionLength > _maxDescriptionLength * 0.8
-                      ? Colors.orange
-                      : _descriptionLength > _maxDescriptionLength
-                      ? Colors.red
-                      : colorScheme.onSurface.withOpacity(0.6),
-                ),
-              ),
-            ],
-          ),
         ],
       ),
     );
   }
 
-  Widget _buildProgressIndicators() {
-    return const SizedBox(height: 16);
-    Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+  Widget _buildVideoPlayer() {
+    return AspectRatio(
+      aspectRatio: _aspectRatio ?? 9 / 16,
+      child: VideoPlayer(_controller),
+    );
+  }
+
+  Widget _buildVideoOverlay({required bool isDark}) {
+    return Positioned.fill(
       child: Column(
         children: [
-          if (_processing) _buildProgressIndicator('Processing video...', null),
-          if (_uploading)
-            _buildProgressIndicator('Uploading video...', _uploadProgress),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActionButtons(ColorScheme colorScheme) {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        children: [
-          // Merge Button
-          Expanded(
-            child: _buildActionButton(
-              icon: Icons.merge_type_rounded,
-              label: 'Merge Audio',
-              onPressed: _processing || _uploading ? null : _onMergePressed,
-              backgroundColor: colorScheme.primary,
-              isLoading: _processing,
-            ),
-          ),
-          const SizedBox(width: 12),
-          // Upload Button
-          Expanded(
-            child: ElevatedButton.icon(
-              onPressed: _processing || _uploading ? null : _onUploadPressed,
-              icon: _uploading
-                  ? SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
-                      ),
-                    )
-                  : const Icon(Icons.cloud_upload_rounded, color: Colors.black),
-              label: Text(
-                _uploading
-                    ? 'Uploading...'
-                    : _descriptionController.text.isNotEmpty
-                    ? 'Upload with Description'
-                    : 'Upload',
-                style: const TextStyle(color: Colors.black),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+          // Top overlay
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.black.withOpacity(isDark ? 0.8 : 0.7),
+                  Colors.transparent,
+                ],
               ),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildUploadSuccessWidget() {
-    return const SizedBox(height: 8);
-
-    Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.green.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.green),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+            child: Row(
               children: [
-                Icon(Icons.check_circle, color: Colors.green, size: 16),
-                const SizedBox(width: 8),
-                Text(
-                  'Upload Successful!',
-                  style: TextStyle(
-                    color: Colors.green,
-                    fontWeight: FontWeight.bold,
+                GestureDetector(
+                  onTap: () => setState(() => _showDuration = true),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.videocam_rounded,
+                          color: Colors.white,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 4),
+                        if (_showDuration)
+                          Text(
+                            '${_controller.value.duration.inMinutes}:${(_controller.value.duration.inSeconds % 60).toString().padLeft(2, '0')}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            if (_uploadedUrl != null)
-              GestureDetector(
-                onTap: () => _showUrlDialog(_uploadedUrl!),
-                child: Text(
-                  _uploadedUrl!,
-                  style: const TextStyle(fontSize: 12),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+          ),
+
+          // Center play button
+          Expanded(
+            child: AnimatedOpacity(
+              opacity: _controller.value.isPlaying ? 0 : 1,
+              duration: const Duration(milliseconds: 300),
+              child: Container(
+                color: Colors.black38,
+                child: Center(
+                  child: FloatingActionButton(
+                    onPressed: _togglePlayPause,
+                    backgroundColor: Colors.black54,
+                    elevation: 4,
+                    child: Icon(
+                      _controller.value.isPlaying
+                          ? Icons.pause
+                          : Icons.play_arrow,
+                      size: 30,
+                      color: Colors.white,
+                    ),
+                  ),
                 ),
               ),
-          ],
-        ),
+            ),
+          ),
+
+          // Bottom overlay
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.bottomCenter,
+                end: Alignment.topCenter,
+                colors: [
+                  Colors.black.withOpacity(isDark ? 0.8 : 0.7),
+                  Colors.transparent,
+                ],
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                IconButton(
+                  onPressed: _togglePlayPause,
+                  icon: Icon(
+                    _controller.value.isPlaying
+                        ? Icons.pause_circle_filled_rounded
+                        : Icons.play_circle_fill_rounded,
+                    color: Colors.white,
+                    size: 40,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildProgressIndicator(String label, double? progress) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
-        const SizedBox(height: 8),
-        Stack(
-          children: [
-            LinearProgressIndicator(
-              value: progress,
-              backgroundColor: Colors.grey[300],
-              valueColor: AlwaysStoppedAnimation<Color>(
-                Theme.of(context).colorScheme.primary,
+  Widget _buildDescriptionBox(
+    ThemeData theme,
+    ColorScheme colorScheme,
+    Color surfaceColor,
+    Color? hintTextColor,
+    Color? mutedTextColor,
+    bool isDark,
+  ) {
+    return Container(
+      decoration: BoxDecoration(
+        color: surfaceColor,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: isDark
+                ? Colors.black.withOpacity(0.6)
+                : Colors.black.withOpacity(0.1),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
+          ),
+        ],
+        border: Border.all(color: isDark ? Colors.white12 : Colors.transparent),
+      ),
+      child: Column(
+        children: [
+          // Description Header
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: colorScheme.primary.withOpacity(isDark ? 0.06 : 0.08),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(20),
+                topRight: Radius.circular(20),
               ),
-              minHeight: 6,
-              borderRadius: BorderRadius.circular(3),
             ),
-            if (progress != null)
-              Positioned(
-                right: 0,
-                child: Text(
-                  '${(progress * 100).toStringAsFixed(1)}%',
-                  style: const TextStyle(fontSize: 10),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Description',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.primary,
+                  ),
+                ),
+                // IconButton(
+                //   icon: Icon(
+                //     _isExpanded ? Icons.expand_less : Icons.expand_more,
+                //     size: 20,
+                //     color: isDark ? Colors.white70 : Colors.black54,
+                //   ),
+                //   onPressed: _toggleDescriptionExpansion,
+                //   tooltip: _isExpanded ? 'Collapse' : 'Expand',
+                // ),
+              ],
+            ),
+          ),
+
+          // Description Field
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _descriptionController,
+                      focusNode: _descriptionFocusNode,
+                      maxLines: _isExpanded ? null : 4,
+                      maxLength: _maxDescriptionLength,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: isDark ? Colors.white : Colors.black87,
+                      ),
+                      decoration: InputDecoration(
+                        hintText:
+                            'Add a description...\n\nUse hashtags: #funny #dance #trending',
+                        hintStyle: TextStyle(
+                          color: hintTextColor,
+                          fontSize: 13,
+                        ),
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '${_descriptionController.text.length}/$_maxDescriptionLength',
+                        style: TextStyle(
+                          color:
+                              _descriptionController.text.length >
+                                  _maxDescriptionLength
+                              ? Colors.red
+                              : _descriptionController.text.length >
+                                    _maxDescriptionLength * 0.8
+                              ? Colors.orange
+                              : mutedTextColor,
+                          fontSize: 12,
+                        ),
+                      ),
+                      if (_audioSelection != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: colorScheme.secondary.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: colorScheme.secondary.withOpacity(0.25),
+                            ),
+                          ),
+                          child: Text(
+                            _audioSelection!.songName ?? "",
+
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: colorScheme.secondary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAudioTrimmerSection(
+    ThemeData theme,
+    ColorScheme colorScheme,
+    Color surfaceColor,
+    Color? mutedTextColor,
+    bool isDark,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: surfaceColor,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: isDark
+                ? Colors.black.withOpacity(0.6)
+                : Colors.black.withOpacity(0.08),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        border: Border.all(color: isDark ? Colors.white12 : Colors.transparent),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Audio Selection',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: isDark ? Colors.white : Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 4),
+          // Text(
+          //   'Trim and adjust audio for your video',
+          //   style: TextStyle(color: mutedTextColor, fontSize: 12),
+          // ),
+          const SizedBox(height: 16),
+          SizedBox(
+            height: 120,
+            child: AudioTrimmerWidget(
+              onChanged: (sel) => setState(() => _audioSelection = sel),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButtonsSection(
+    ThemeData theme,
+    ColorScheme colorScheme,
+    bool isDark,
+  ) {
+    return Column(
+      children: [
+        // Progress Indicators
+        if (_processing || _uploading)
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF121212) : colorScheme.surface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: isDark ? Colors.white12 : Colors.transparent,
+              ),
+            ),
+            child: Column(
+              children: [
+                if (_processing)
+                  _buildProgressIndicator('Processing audio...', null),
+                if (_uploading)
+                  _buildProgressIndicator('Posting video...', _uploadProgress),
+              ],
+            ),
+          ),
+
+        const SizedBox(height: 16),
+
+        // Buttons Row
+        Row(
+          children: [
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: _processing || _uploading ? null : _onMergePressed,
+                icon: _processing
+                    ? SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            colorScheme.onPrimary,
+                          ),
+                        ),
+                      )
+                    : const Icon(Icons.merge_type_rounded),
+                label: Text(
+                  _processing ? 'Processing...' : 'Merge Audio',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: colorScheme.primary,
+                  foregroundColor: colorScheme.onPrimary,
+                  padding: const EdgeInsets.symmetric(vertical: 18),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  elevation: 2,
                 ),
               ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: _processing || _uploading ? null : _onUploadPressed,
+                icon: _uploading
+                    ? SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white,
+                          ),
+                        ),
+                      )
+                    : const Icon(Icons.cloud_upload_rounded),
+                label: Text(
+                  _uploading ? 'Posting...' : 'Post Video',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 18),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  elevation: 2,
+                ),
+              ),
+            ),
           ],
         ),
       ],
     );
   }
 
-  Widget _buildActionButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback? onPressed,
-    required Color backgroundColor,
-    required bool isLoading,
-  }) {
-    return ElevatedButton.icon(
-      onPressed: onPressed,
-      icon: isLoading
-          ? SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-              ),
-            )
-          : Icon(icon),
-      label: isLoading
-          ? const Text('Processing...')
-          : Text(
-              label,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-              textAlign: TextAlign.center,
-            ),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: backgroundColor,
-        foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        elevation: 2,
-      ),
-    );
-  }
-
-  void _showUrlDialog(String url) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Uploaded Video URL'),
-        content: SelectableText(url),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-          TextButton(
-            onPressed: () {
-              // Clipboard.setData(ClipboardData(text: url));
-              _showSuccessSnackBar('URL copied to clipboard!');
-              Navigator.pop(context);
-            },
-            child: const Text('Copy'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showVideoInfo() {
-    final duration = _controller.value.duration;
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Video Information'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildProgressIndicator(String label, double? progress) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              'Duration: ${duration.inMinutes}:${(duration.inSeconds % 60).toString().padLeft(2, '0')}',
-            ),
-            Text(
-              'Resolution: ${_controller.value.size.width.toInt()}x${_controller.value.size.height.toInt()}',
-            ),
-            Text(
-              'Aspect Ratio: ${_controller.value.aspectRatio.toStringAsFixed(2)}',
-            ),
-            if (_descriptionController.text.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              const Text('Description:'),
-              Text(_descriptionController.text),
-            ],
+            Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
+            if (progress != null)
+              Text(
+                '${(progress * 100).toStringAsFixed(1)}%',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+        const SizedBox(height: 8),
+        LinearProgressIndicator(
+          value: progress,
+          backgroundColor: isDark ? Colors.grey[800] : Colors.grey[200],
+          valueColor: AlwaysStoppedAnimation<Color>(
+            Theme.of(context).colorScheme.primary,
           ),
-        ],
-      ),
+          minHeight: 8,
+        ),
+        const SizedBox(height: 12),
+      ],
     );
   }
 }

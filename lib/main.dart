@@ -11,7 +11,6 @@ import 'package:tiktok/firebase_options.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
   // ✅ Initialize Firebase Core
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
